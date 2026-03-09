@@ -32,6 +32,7 @@ Install a subset:
 - Existing files are backed up to `~/.config/.backup/<timestamp>/`.
 - Private state is not overwritten.
 - If `zsh` is selected and your login shell is not `zsh`, the installer attempts `chsh -s <resolved-zsh-path>` automatically.
+- If that `zsh` path is missing from `/etc/shells`, the installer tries to register it first and may prompt for your `sudo` password.
 - After package installation and shell switching, the installer writes `brew shellenv` to the profile file that matches your current login shell.
 
 ## Sync-only configs
