@@ -9,6 +9,12 @@ case "${1:-}" in
   platforms) printf 'darwin\nlinux\n' ;;
   formulae) printf 'fastfetch\n' ;;
   apply) : ;;
-  verify) command -v fastfetch >/dev/null 2>&1 || die "fastfetch not found" ;;
+  verify)
+    if [[ "$DRY_RUN" == "1" ]] && ! command -v fastfetch >/dev/null 2>&1; then
+      log "Would verify fastfetch after install"
+    else
+      command -v fastfetch >/dev/null 2>&1 || die "fastfetch not found"
+    fi
+    ;;
   *) die "Unknown subcommand for fastfetch: ${1:-}" ;;
 esac

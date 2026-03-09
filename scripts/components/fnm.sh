@@ -9,6 +9,12 @@ case "${1:-}" in
   platforms) printf 'darwin\nlinux\n' ;;
   formulae) printf 'fnm\n' ;;
   apply) : ;;
-  verify) command -v fnm >/dev/null 2>&1 || die "fnm not found" ;;
+  verify)
+    if [[ "$DRY_RUN" == "1" ]] && ! command -v fnm >/dev/null 2>&1; then
+      log "Would verify fnm after install"
+    else
+      command -v fnm >/dev/null 2>&1 || die "fnm not found"
+    fi
+    ;;
   *) die "Unknown subcommand for fnm: ${1:-}" ;;
 esac

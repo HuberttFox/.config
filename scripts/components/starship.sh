@@ -9,6 +9,12 @@ case "${1:-}" in
   platforms) printf 'darwin\nlinux\n' ;;
   formulae) printf 'starship\n' ;;
   apply) : ;;
-  verify) command -v starship >/dev/null 2>&1 || die "starship not found" ;;
+  verify)
+    if [[ "$DRY_RUN" == "1" ]] && ! command -v starship >/dev/null 2>&1; then
+      log "Would verify starship after install"
+    else
+      command -v starship >/dev/null 2>&1 || die "starship not found"
+    fi
+    ;;
   *) die "Unknown subcommand for starship: ${1:-}" ;;
 esac
