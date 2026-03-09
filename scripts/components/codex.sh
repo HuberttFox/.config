@@ -8,9 +8,6 @@ initialize_common_state
 apply_component() {
   require_repo_file "codex/config.toml"
   ensure_symlink "$CONFIG_REPO/codex/config.toml" "$HOME/.codex/config.toml"
-  if [[ "$PLATFORM" == "linux" ]]; then
-    ensure_npm_global_package "@openai/codex"
-  fi
 }
 
 verify_component() {
@@ -26,7 +23,7 @@ case "${1:-}" in
   platforms) printf 'darwin\nlinux\n' ;;
   formulae)
     if [[ "$PLATFORM" == "linux" ]]; then
-      printf 'node\n'
+      printf 'codex\n'
     fi
     ;;
   casks)

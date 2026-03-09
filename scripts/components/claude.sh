@@ -6,9 +6,6 @@ source "$ROOT_DIR/scripts/lib/common.sh"
 initialize_common_state
 
 apply_component() {
-  if [[ "$PLATFORM" == "linux" ]]; then
-    ensure_npm_global_package "@anthropic-ai/claude-code"
-  fi
   log "claude-code has no repo-managed shared config yet"
 }
 
@@ -20,7 +17,7 @@ case "${1:-}" in
   platforms) printf 'darwin\nlinux\n' ;;
   formulae)
     if [[ "$PLATFORM" == "linux" ]]; then
-      printf 'node\n'
+      printf 'claude-code\n'
     fi
     ;;
   casks)
