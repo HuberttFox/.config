@@ -257,6 +257,35 @@ shell_is_registered() {
   grep -Fqx "$shell_path" /etc/shells
 }
 
+ensure_shell_registered() {
+  local shell_path="$1"
+
+  shell_is_registered "$shell_path" && return 0
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    log "Would run: printf '%s\\n' '$shell_path' | sudo tee -a /etc/shells >/dev/null"
+    return 0
+  fi
+
+  if [[ ! -t 0 || ! -t 1 ]]; then
+    warn "Cannot auto-register $shell_path in /etc/shells without an interactive terminal"
+    return 1
+  fi
+
+  command -v sudo >/dev/null 2>&1 || {
+    warn "Cannot auto-register $shell_path because sudo is unavailable"
+    return 1
+  }
+
+  log "Registering zsh in /etc/shells: $shell_path"
+  if printf '%s\n' "$shell_path" | sudo tee -a /etc/shells >/dev/null; then
+    shell_is_registered "$shell_path" && return 0
+  fi
+
+  warn "Failed to register $shell_path in /etc/shells"
+  return 1
+}
+
 print_shell_detection_context() {
   local current_shell login_shell
   current_shell="$(current_shell_path)"
@@ -312,6 +341,16 @@ auto_switch_login_shell_to_zsh() {
     return 0
   fi
 
+  if ! shell_is_registered "$zsh_path"; then
+    if ! ensure_shell_registered "$zsh_path"; then
+      warn "Automatic shell switch skipped: $zsh_path is not listed in /etc/shells"
+      log "Run these commands manually if you want zsh as your login shell:"
+      log "  printf '%s\n' '$zsh_path' | sudo tee -a /etc/shells >/dev/null"
+      log "  chsh -s $zsh_path"
+      return 0
+    fi
+  fi
+
   if [[ "$DRY_RUN" == "1" ]]; then
     log "Would run: chsh -s $zsh_path"
     return 0
@@ -328,6 +367,23 @@ auto_switch_login_shell_to_zsh() {
 
   warn "Automatic shell switch failed"
   warn "Run this command manually: chsh -s $zsh_path"
+}
+
+start_interactive_zsh_session() {
+  local current_shell zsh_path
+  current_shell="$(current_shell_path)"
+
+  [[ "$DRY_RUN" != "1" ]] || return 0
+  [[ -t 0 && -t 1 ]] || return 0
+  [[ "$current_shell" != */zsh ]] || return 0
+
+  if ! zsh_path="$(preferred_zsh_path 2>/dev/null)"; then
+    warn "Skipping zsh session handoff because zsh is not available in PATH"
+    return 0
+  fi
+
+  log "Starting a new login zsh session"
+  exec "$zsh_path" -l
 }
 
 npm_global_package_installed() {
