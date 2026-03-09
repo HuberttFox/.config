@@ -36,6 +36,8 @@ MANAGED
 
 verify_component() {
   local tmux_output=""
+  local tmux_bin=""
+  local socket_name="dotfiles-verify-$$"
 
   if [[ "$DRY_RUN" == "1" && ! -x "$HOME/.tmux/plugins/tpm/tpm" ]]; then
     log "Would verify ~/.tmux/plugins/tpm/tpm after install"
@@ -48,14 +50,17 @@ verify_component() {
     return 0
   fi
   [[ -f "$HOME/.tmux.conf" ]] || die "Missing ~/.tmux.conf"
-  command_path tmux >/dev/null 2>&1 || return 0
+  tmux_bin="$(command_path tmux 2>/dev/null)" || return 0
   if [[ "$DRY_RUN" == "1" ]]; then
     log "Would verify tmux by sourcing ~/.tmux.conf"
   else
-    tmux start-server >/dev/null 2>&1 || true
-    if ! tmux_output="$(tmux source-file "$HOME/.tmux.conf" 2>&1)"; then
+    "$tmux_bin" -L "$socket_name" -f /dev/null new-session -d -s dotfiles-verify >/dev/null 2>&1 || \
+      die "tmux failed to start an isolated verification server"
+    if ! tmux_output="$("$tmux_bin" -L "$socket_name" source-file "$HOME/.tmux.conf" 2>&1)"; then
+      "$tmux_bin" -L "$socket_name" kill-server >/dev/null 2>&1 || true
       die "tmux failed to source ~/.tmux.conf: $tmux_output"
     fi
+    "$tmux_bin" -L "$socket_name" kill-server >/dev/null 2>&1 || true
   fi
 }
 
