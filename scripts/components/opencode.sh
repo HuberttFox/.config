@@ -6,7 +6,6 @@ source "$ROOT_DIR/scripts/lib/common.sh"
 initialize_common_state
 
 apply_component() {
-  require_repo_file "opencode/package.json"
   log "opencode config already lives under ~/.config/opencode"
 }
 
