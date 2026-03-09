@@ -7,7 +7,7 @@ initialize_common_state
 
 apply_component() {
   if [[ "$PLATFORM" == "linux" ]]; then
-    ensure_npm_global_package "claude-code"
+    ensure_npm_global_package "@anthropic-ai/claude-code"
   fi
   log "claude-code has no repo-managed shared config yet"
 }
