@@ -21,6 +21,7 @@ verify_component() {
 case "${1:-}" in
   platforms) printf 'darwin\nlinux\n' ;;
   formulae) printf 'fzf\n' ;;
+  casks) ;;
   apply) apply_component ;;
   verify) verify_component ;;
   *) die "Unknown subcommand for fzf: ${1:-}" ;;

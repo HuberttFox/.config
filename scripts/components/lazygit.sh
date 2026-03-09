@@ -8,13 +8,8 @@ initialize_common_state
 case "${1:-}" in
   platforms) printf 'darwin\nlinux\n' ;;
   formulae) printf 'lazygit\n' ;;
+  casks) ;;
   apply) : ;;
-  verify)
-    if [[ "$DRY_RUN" == "1" ]] && ! command -v lazygit >/dev/null 2>&1; then
-      log "Would verify lazygit after install"
-    else
-      command -v lazygit >/dev/null 2>&1 || die "lazygit not found"
-    fi
-    ;;
+  verify) ensure_command_available "lazygit" ;;
   *) die "Unknown subcommand for lazygit: ${1:-}" ;;
 esac

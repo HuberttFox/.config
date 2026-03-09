@@ -291,3 +291,55 @@ ensure_npm_global_package() {
     run_cmd npm install -g "$package"
   fi
 }
+
+command_path() {
+  local name="$1"
+  local candidate
+  local npm_bin=""
+
+  if candidate="$(command -v "$name" 2>/dev/null)"; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+
+  for candidate in \
+    "/opt/homebrew/bin/$name" \
+    "/home/linuxbrew/.linuxbrew/bin/$name" \
+    "/usr/local/bin/$name" \
+    "/bin/$name" \
+    "/usr/bin/$name"
+  do
+    if [[ -x "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  if command -v npm >/dev/null 2>&1; then
+    npm_bin="$(npm prefix -g 2>/dev/null)/bin"
+    candidate="$npm_bin/$name"
+    if [[ -x "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
+ensure_command_available() {
+  local name="$1"
+  local resolved=""
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    if resolved="$(command_path "$name" 2>/dev/null)"; then
+      log "Verified command: $name -> $resolved"
+    else
+      log "Would verify $name after install"
+    fi
+    return 0
+  fi
+
+  resolved="$(command_path "$name" 2>/dev/null)" || die "$name not found"
+  log "Verified command: $name -> $resolved"
+}

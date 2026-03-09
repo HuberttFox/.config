@@ -13,11 +13,7 @@ apply_component() {
 }
 
 verify_component() {
-  if [[ "$DRY_RUN" == "1" ]] && ! command -v opencode >/dev/null 2>&1; then
-    log "Would verify opencode after install"
-  else
-    command -v opencode >/dev/null 2>&1 || die "opencode not found"
-  fi
+  ensure_command_available "opencode"
 }
 
 case "${1:-}" in

@@ -8,13 +8,8 @@ initialize_common_state
 case "${1:-}" in
   platforms) printf 'darwin\nlinux\n' ;;
   formulae) printf 'starship\n' ;;
+  casks) ;;
   apply) : ;;
-  verify)
-    if [[ "$DRY_RUN" == "1" ]] && ! command -v starship >/dev/null 2>&1; then
-      log "Would verify starship after install"
-    else
-      command -v starship >/dev/null 2>&1 || die "starship not found"
-    fi
-    ;;
+  verify) ensure_command_available "starship" ;;
   *) die "Unknown subcommand for starship: ${1:-}" ;;
 esac

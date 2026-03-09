@@ -8,13 +8,8 @@ initialize_common_state
 case "${1:-}" in
   platforms) printf 'darwin\nlinux\n' ;;
   formulae) printf 'fastfetch\n' ;;
+  casks) ;;
   apply) : ;;
-  verify)
-    if [[ "$DRY_RUN" == "1" ]] && ! command -v fastfetch >/dev/null 2>&1; then
-      log "Would verify fastfetch after install"
-    else
-      command -v fastfetch >/dev/null 2>&1 || die "fastfetch not found"
-    fi
-    ;;
+  verify) ensure_command_available "fastfetch" ;;
   *) die "Unknown subcommand for fastfetch: ${1:-}" ;;
 esac

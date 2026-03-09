@@ -82,6 +82,7 @@ brew_install_formulae() {
       run_cmd "$BREW_BIN" install "$formula"
     fi
   done
+  activate_brew_shellenv
 }
 
 brew_install_casks() {
@@ -98,4 +99,5 @@ brew_install_casks() {
       run_cmd "$BREW_BIN" install --cask "$cask"
     fi
   done
+  activate_brew_shellenv
 }

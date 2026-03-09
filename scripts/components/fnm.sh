@@ -8,6 +8,7 @@ initialize_common_state
 case "${1:-}" in
   platforms) printf 'darwin\nlinux\n' ;;
   formulae) printf 'fnm\n' ;;
+  casks) ;;
   apply) : ;;
   verify)
     if [[ "$DRY_RUN" == "1" ]] && ! command -v fnm >/dev/null 2>&1; then
