@@ -30,8 +30,8 @@ Install a subset:
 - On Linux, `codex`, `claude-code`, and `opencode` are installed via Homebrew.
 - Existing files are backed up to `~/.config/.backup/<timestamp>/`.
 - Private state is not overwritten.
-- The installer does not automatically change your default shell to `zsh`.
-- If your login shell is not `zsh`, the installer prints the manual `chsh` command after install.
+- If `zsh` is selected and your login shell is not `zsh`, the installer attempts `chsh -s <resolved-zsh-path>` automatically.
+- After package installation and shell switching, the installer writes `brew shellenv` to the profile file that matches your current login shell.
 
 ## Sync-only configs
 

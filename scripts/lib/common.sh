@@ -221,6 +221,35 @@ preferred_zsh_path() {
   return 1
 }
 
+switchable_zsh_path() {
+  local candidate
+  local candidates=()
+  local preferred=""
+
+  if preferred="$(preferred_zsh_path 2>/dev/null)"; then
+    append_unique candidates "$preferred"
+  fi
+
+  for candidate in /home/linuxbrew/.linuxbrew/bin/zsh /opt/homebrew/bin/zsh /usr/local/bin/zsh /bin/zsh /usr/bin/zsh; do
+    [[ -x "$candidate" ]] || continue
+    append_unique candidates "$candidate"
+  done
+
+  for candidate in "${candidates[@]}"; do
+    if shell_is_registered "$candidate"; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  for candidate in "${candidates[@]}"; do
+    printf '%s\n' "$candidate"
+    return 0
+  done
+
+  return 1
+}
+
 shell_is_registered() {
   local shell_path="$1"
   [[ -n "$shell_path" ]] || return 1
@@ -265,6 +294,40 @@ maybe_print_zsh_switch_notice() {
   fi
 
   log "Log out and back in for the shell change to take effect"
+}
+
+auto_switch_login_shell_to_zsh() {
+  local login_shell current_shell zsh_path
+  current_shell="$(current_shell_path)"
+  login_shell="$(login_shell_path)"
+
+  [[ "$login_shell" != "unknown" ]] || return 0
+  if [[ "$login_shell" == */zsh ]]; then
+    log "Login shell already uses zsh: $login_shell"
+    return 0
+  fi
+
+  if ! zsh_path="$(switchable_zsh_path 2>/dev/null)"; then
+    warn "Unable to resolve a usable zsh path for automatic shell switching"
+    return 0
+  fi
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    log "Would run: chsh -s $zsh_path"
+    return 0
+  fi
+
+  log "Switching login shell to zsh: $zsh_path"
+  if chsh -s "$zsh_path"; then
+    log "Login shell updated to: $zsh_path"
+    if [[ "$current_shell" != */zsh ]]; then
+      log "Open a new terminal session to start using zsh"
+    fi
+    return 0
+  fi
+
+  warn "Automatic shell switch failed"
+  warn "Run this command manually: chsh -s $zsh_path"
 }
 
 npm_global_package_installed() {

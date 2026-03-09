@@ -112,7 +112,6 @@ install_packages() {
 
   ensure_brew
   activate_brew_shellenv
-  ensure_brew_shellenv_in_zprofile
   if [[ ${#formulae[@]} -gt 0 ]]; then
     brew_install_formulae "${formulae[@]}"
   fi
@@ -192,6 +191,10 @@ install_packages
 apply_components
 verify_components
 if contains_word "zsh" "${SELECTED_COMPONENTS[@]}"; then
-  maybe_print_zsh_switch_notice
+  auto_switch_login_shell_to_zsh
+fi
+if find_brew_bin >/dev/null 2>&1; then
+  activate_brew_shellenv
+  ensure_brew_shellenv_for_login_shell
 fi
 log "Install completed"

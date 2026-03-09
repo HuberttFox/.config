@@ -64,6 +64,28 @@ ensure_brew_shellenv_in_zprofile() {
   ensure_line_in_file "$HOME/.zprofile" "$line"
 }
 
+ensure_brew_shellenv_for_login_shell() {
+  local line
+  local login_shell
+  local target_file
+
+  [[ -n "$BREW_BIN" ]] || BREW_BIN="$(find_brew_bin)"
+  export BREW_BIN
+  line="$(printf 'eval "$(%s shellenv)"' "$BREW_BIN")"
+  login_shell="$(login_shell_path)"
+
+  case "$login_shell" in
+    */zsh) target_file="$HOME/.zprofile" ;;
+    */bash) target_file="$HOME/.bash_profile" ;;
+    *)
+      target_file="$HOME/.profile"
+      warn "Unknown login shell for brew env persistence: $login_shell"
+      ;;
+  esac
+
+  ensure_line_in_file "$target_file" "$line"
+}
+
 brew_formula_installed() {
   "$BREW_BIN" list --formula "$1" >/dev/null 2>&1
 }
