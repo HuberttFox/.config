@@ -1,0 +1,17 @@
+id: ModelScope
+name: ModelScope
+base_url: https://api.deepseek.com/v1
+api_keys: sk-d3bcebcef5bb44dcbdfbbc2b680a0a5d
+perplexity: sk-d3bcebcef5bb44dcbdfbbc2b680a0a5d
+additional_parameters:
+stream: true
+models:
+  id: deepseek-ai/DeepSeek-V3.2
+  name: DeepSeek-V3.2
+  provider: ModelScope
+  description: "DeepSeek-V3.2"
+  context: 128000
+  abilities:
+  tools:
+  supported: true
+

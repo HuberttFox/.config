@@ -1,0 +1,16 @@
+model = "gpt-5.4"
+model_reasoning_effort = "high"
+[projects."/Users/shiujenyu"]
+trust_level = "untrusted"
+
+[projects."/Users/shiujenyu/Documents/codex"]
+trust_level = "untrusted"
+
+[projects."/Users/shiujenyu/Documents"]
+trust_level = "trusted"
+
+[projects."/Users/shiujenyu/Documents/my-brain"]
+trust_level = "trusted"
+
+[notice.model_migrations]
+"gpt-5.2-codex" = "gpt-5.3-codex"

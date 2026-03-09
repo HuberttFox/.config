@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+export CONFIG_REPO="$ROOT_DIR"
+source "$ROOT_DIR/scripts/lib/common.sh"
+initialize_common_state
+
+apply_component() {
+  require_repo_file "opencode/package.json"
+  log "opencode config already lives under ~/.config/opencode"
+}
+
+verify_component() {
+  command -v opencode >/dev/null 2>&1 || die "opencode not found"
+}
+
+case "${1:-}" in
+  platforms) printf 'darwin\nlinux\n' ;;
+  formulae) printf 'opencode\n' ;;
+  apply) apply_component ;;
+  verify) verify_component ;;
+  *) die "Unknown subcommand for opencode: ${1:-}" ;;
+esac

@@ -1,0 +1,15 @@
+.DS_Store
+*.log
+*.tmp
+*.zwc
+.zcompdump*
+
+git/config
+iterm2/AppSupport/
+iterm2/sockets/
+iterm2/sockets/**
+mole/*.log
+opencode/node_modules/
+raycast/extensions/node_modules/
+
+.backup/
