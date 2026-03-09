@@ -183,7 +183,34 @@ require_repo_file() {
 }
 
 current_shell_path() {
-  printf '%s\n' "${SHELL:-unknown}"
+  local shell_path=""
+
+  case "$PLATFORM" in
+    linux)
+      if [[ -L "/proc/$$/exe" ]]; then
+        shell_path="$(readlink "/proc/$$/exe" 2>/dev/null || true)"
+      fi
+      ;;
+    darwin)
+      if command -v ps >/dev/null 2>&1; then
+        shell_path="$(ps -p $$ -o comm= 2>/dev/null | awk '{$1=$1; print}')"
+      fi
+      ;;
+  esac
+
+  if [[ -z "$shell_path" ]] && command -v ps >/dev/null 2>&1; then
+    shell_path="$(ps -p $$ -o comm= 2>/dev/null | awk '{$1=$1; print}')"
+  fi
+
+  if [[ -z "$shell_path" && -n "${ZSH_VERSION:-}" ]]; then
+    shell_path="$(command_path zsh 2>/dev/null || true)"
+  fi
+
+  if [[ -z "$shell_path" && -n "${BASH_VERSION:-}" ]]; then
+    shell_path="$(command_path bash 2>/dev/null || true)"
+  fi
+
+  printf '%s\n' "${shell_path:-${SHELL:-unknown}}"
 }
 
 login_shell_path() {
@@ -383,6 +410,7 @@ start_interactive_zsh_session() {
   fi
 
   log "Starting a new login zsh session"
+  export SHELL="$zsh_path"
   exec "$zsh_path" -l
 }
 
