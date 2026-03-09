@@ -7,6 +7,7 @@ initialize_common_state
 
 apply_component() {
   local tpm_dir="$HOME/.tmux/plugins/tpm"
+  local tpm_install="$tpm_dir/bin/install_plugins"
 
   require_repo_file "tmux/tmux.conf"
   if [[ ! -d "$tpm_dir" ]]; then
@@ -24,9 +25,18 @@ apply_component() {
   write_managed_file "$HOME/.tmux.conf" <<'MANAGED'
 source-file ~/.config/tmux/tmux.conf
 MANAGED
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    log "Would install tmux plugins via TPM"
+  else
+    [[ -x "$tpm_install" ]] || die "Missing $tpm_install"
+    "$tpm_install" >/dev/null
+  fi
 }
 
 verify_component() {
+  local tmux_output=""
+
   if [[ "$DRY_RUN" == "1" && ! -x "$HOME/.tmux/plugins/tpm/tpm" ]]; then
     log "Would verify ~/.tmux/plugins/tpm/tpm after install"
   else
@@ -43,7 +53,9 @@ verify_component() {
     log "Would verify tmux by sourcing ~/.tmux.conf"
   else
     tmux start-server >/dev/null 2>&1 || true
-    tmux source-file "$HOME/.tmux.conf" >/dev/null 2>&1 || die "tmux failed to source ~/.tmux.conf"
+    if ! tmux_output="$(tmux source-file "$HOME/.tmux.conf" 2>&1)"; then
+      die "tmux failed to source ~/.tmux.conf: $tmux_output"
+    fi
   fi
 }
 
