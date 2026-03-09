@@ -53,7 +53,7 @@ activate_brew_shellenv() {
     return 0
   fi
 
-  eval "$(\"$BREW_BIN\" shellenv)"
+  eval "$("$BREW_BIN" shellenv)"
 }
 
 ensure_brew_shellenv_in_zprofile() {

@@ -269,12 +269,14 @@ maybe_print_zsh_switch_notice() {
 
 npm_global_package_installed() {
   local package="$1"
-  command -v npm >/dev/null 2>&1 || return 1
-  npm list -g --depth=0 "$package" >/dev/null 2>&1
+  local npm_cmd=""
+  npm_cmd="$(command_path npm 2>/dev/null)" || return 1
+  "$npm_cmd" list -g --depth=0 "$package" >/dev/null 2>&1
 }
 
 ensure_npm_global_package() {
   local package="$1"
+  local npm_cmd=""
   if [[ "$DRY_RUN" == "1" ]]; then
     if npm_global_package_installed "$package"; then
       log "npm package already installed globally: $package"
@@ -284,11 +286,11 @@ ensure_npm_global_package() {
     return 0
   fi
 
-  command -v npm >/dev/null 2>&1 || die "npm not found"
+  npm_cmd="$(command_path npm 2>/dev/null)" || die "npm not found"
   if npm_global_package_installed "$package"; then
     log "npm package already installed globally: $package"
   else
-    run_cmd npm install -g "$package"
+    run_cmd "$npm_cmd" install -g "$package"
   fi
 }
 
