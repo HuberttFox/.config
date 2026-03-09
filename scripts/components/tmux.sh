@@ -13,6 +13,10 @@ MANAGED
 }
 
 verify_component() {
+  if [[ "$DRY_RUN" == "1" && ! -f "$HOME/.tmux.conf" ]]; then
+    log "Would verify ~/.tmux.conf after creation"
+    return 0
+  fi
   [[ -f "$HOME/.tmux.conf" ]] || die "Missing ~/.tmux.conf"
   command -v tmux >/dev/null 2>&1 || return 0
   if [[ "$DRY_RUN" == "1" ]]; then

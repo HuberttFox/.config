@@ -23,6 +23,10 @@ MANAGED
 }
 
 verify_component() {
+  if [[ "$DRY_RUN" == "1" && ! -f "$HOME/.gitconfig" ]]; then
+    log "Would verify ~/.gitconfig after creation"
+    return 0
+  fi
   [[ -f "$HOME/.gitconfig" ]] || die "Missing ~/.gitconfig"
 }
 

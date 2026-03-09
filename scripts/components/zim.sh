@@ -11,6 +11,10 @@ apply_component() {
 }
 
 verify_component() {
+  if [[ "$DRY_RUN" == "1" && ! -L "$HOME/.zimrc" ]]; then
+    log "Would verify ~/.zimrc symlink after creation"
+    return 0
+  fi
   [[ -L "$HOME/.zimrc" ]] || die "~/.zimrc is not a symlink"
 }
 
