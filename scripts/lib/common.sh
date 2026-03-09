@@ -266,3 +266,28 @@ maybe_print_zsh_switch_notice() {
 
   log "Log out and back in for the shell change to take effect"
 }
+
+npm_global_package_installed() {
+  local package="$1"
+  command -v npm >/dev/null 2>&1 || return 1
+  npm list -g --depth=0 "$package" >/dev/null 2>&1
+}
+
+ensure_npm_global_package() {
+  local package="$1"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    if npm_global_package_installed "$package"; then
+      log "npm package already installed globally: $package"
+    else
+      log "Would install npm package globally: $package"
+    fi
+    return 0
+  fi
+
+  command -v npm >/dev/null 2>&1 || die "npm not found"
+  if npm_global_package_installed "$package"; then
+    log "npm package already installed globally: $package"
+  else
+    run_cmd npm install -g "$package"
+  fi
+}

@@ -6,6 +6,9 @@ source "$ROOT_DIR/scripts/lib/common.sh"
 initialize_common_state
 
 apply_component() {
+  if [[ "$PLATFORM" == "linux" ]]; then
+    ensure_npm_global_package "claude-code"
+  fi
   log "claude-code has no repo-managed shared config yet"
 }
 
@@ -18,9 +21,17 @@ verify_component() {
 }
 
 case "${1:-}" in
-  platforms) printf 'darwin\n' ;;
-  formulae) ;;
-  casks) printf 'claude-code\n' ;;
+  platforms) printf 'darwin\nlinux\n' ;;
+  formulae)
+    if [[ "$PLATFORM" == "linux" ]]; then
+      printf 'node\n'
+    fi
+    ;;
+  casks)
+    if [[ "$PLATFORM" == "darwin" ]]; then
+      printf 'claude-code\n'
+    fi
+    ;;
   apply) apply_component ;;
   verify) verify_component ;;
   *) die "Unknown subcommand for claude: ${1:-}" ;;
