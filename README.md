@@ -28,6 +28,8 @@ Install a subset:
 - Existing files are backed up to `~/.config/.backup/<timestamp>/`.
 - Private state is not overwritten.
 - Homebrew cask apps are intentionally excluded from this installer.
+- The installer does not automatically change your default shell to `zsh`.
+- If your login shell is not `zsh`, the installer prints the manual `chsh` command after install.
 
 ## Sync-only configs
 

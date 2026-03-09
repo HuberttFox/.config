@@ -173,8 +173,14 @@ collect_selected_components
 filter_supported_components
 
 log "Platform: $PLATFORM"
+if contains_word "zsh" "${SELECTED_COMPONENTS[@]}"; then
+  print_shell_detection_context
+fi
 log "Selected components: ${SELECTED_COMPONENTS[*]}"
 install_formulae
 apply_components
 verify_components
+if contains_word "zsh" "${SELECTED_COMPONENTS[@]}"; then
+  maybe_print_zsh_switch_notice
+fi
 log "Install completed"
