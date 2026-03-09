@@ -25,7 +25,7 @@ Install a subset:
 ## Notes
 
 - Homebrew formulae are preferred.
-- `zim` is installed via the official installer script, then `~/.zimrc` is linked back to the repo-managed config.
+- `zim` downloads `zimfw.zsh`, links `~/.zimrc` to the repo-managed config, and generates `~/.zim/init.zsh` without rewriting `~/.zshrc`.
 - `tmux` installs TPM (`~/.tmux/plugins/tpm`) before loading the repo-managed tmux config.
 - On macOS, `codex` and `claude-code` are installed via Homebrew casks, and `opencode` via Homebrew formula.
 - On Linux, `codex`, `claude-code`, and `opencode` are installed via Homebrew.
