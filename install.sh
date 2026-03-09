@@ -9,7 +9,7 @@ source "$ROOT_DIR/scripts/lib/common.sh"
 # shellcheck source=scripts/lib/brew.sh
 source "$ROOT_DIR/scripts/lib/brew.sh"
 
-ALL_COMPONENTS=(git zsh fnm zim fzf starship tmux tldr fastfetch opencode mole)
+ALL_COMPONENTS=(git zsh zim fzf starship tmux tldr fastfetch opencode mole)
 SELECTED_COMPONENTS=()
 SKIP_COMPONENTS=()
 DRY_RUN=0
