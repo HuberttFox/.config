@@ -9,6 +9,12 @@ case "${1:-}" in
   platforms) printf 'darwin\nlinux\n' ;;
   formulae) printf 'tldr\n' ;;
   apply) : ;;
-  verify) command -v tldr >/dev/null 2>&1 || die "tldr not found" ;;
+  verify)
+    if [[ "$DRY_RUN" == "1" ]] && ! command -v tldr >/dev/null 2>&1; then
+      log "Would verify tldr after install"
+    else
+      command -v tldr >/dev/null 2>&1 || die "tldr not found"
+    fi
+    ;;
   *) die "Unknown subcommand for tldr: ${1:-}" ;;
 esac

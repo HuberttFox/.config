@@ -10,7 +10,11 @@ apply_component() {
 }
 
 verify_component() {
-  command -v mole >/dev/null 2>&1 || die "mole not found"
+  if [[ "$DRY_RUN" == "1" ]] && ! command -v mole >/dev/null 2>&1; then
+    log "Would verify mole after install"
+  else
+    command -v mole >/dev/null 2>&1 || die "mole not found"
+  fi
 }
 
 case "${1:-}" in
