@@ -25,6 +25,7 @@ Install a subset:
 ## Notes
 
 - Homebrew formulae are preferred.
+- `zim` is installed via the official installer script, then `~/.zimrc` is linked back to the repo-managed config.
 - On macOS, `codex` and `claude-code` are installed via Homebrew casks, and `opencode` via Homebrew formula.
 - On Linux, `codex`, `claude-code`, and `opencode` are installed via Homebrew.
 - Existing files are backed up to `~/.config/.backup/<timestamp>/`.
