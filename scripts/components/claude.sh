@@ -13,11 +13,7 @@ apply_component() {
 }
 
 verify_component() {
-  if [[ "$DRY_RUN" == "1" ]] && ! command -v claude >/dev/null 2>&1; then
-    log "Would verify claude after install"
-  else
-    command -v claude >/dev/null 2>&1 || die "claude not found"
-  fi
+  ensure_command_available "claude"
 }
 
 case "${1:-}" in

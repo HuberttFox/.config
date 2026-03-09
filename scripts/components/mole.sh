@@ -10,16 +10,13 @@ apply_component() {
 }
 
 verify_component() {
-  if [[ "$DRY_RUN" == "1" ]] && ! command -v mole >/dev/null 2>&1; then
-    log "Would verify mole after install"
-  else
-    command -v mole >/dev/null 2>&1 || die "mole not found"
-  fi
+  ensure_command_available "mole"
 }
 
 case "${1:-}" in
   platforms) printf 'darwin\n' ;;
   formulae) printf 'mole\n' ;;
+  casks) ;;
   apply) apply_component ;;
   verify) verify_component ;;
   *) die "Unknown subcommand for mole: ${1:-}" ;;

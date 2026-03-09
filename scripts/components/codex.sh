@@ -19,11 +19,7 @@ verify_component() {
     return 0
   fi
   [[ -L "$HOME/.codex/config.toml" ]] || die "~/.codex/config.toml is not a symlink"
-  if [[ "$DRY_RUN" == "1" ]] && ! command -v codex >/dev/null 2>&1; then
-    log "Would verify codex after install"
-  else
-    command -v codex >/dev/null 2>&1 || die "codex not found"
-  fi
+  ensure_command_available "codex"
 }
 
 case "${1:-}" in
