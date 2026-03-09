@@ -11,6 +11,10 @@ apply_component() {
 }
 
 verify_component() {
+  if [[ "$DRY_RUN" == "1" && ! -L "$HOME/.fzf.zsh" ]]; then
+    log "Would verify ~/.fzf.zsh symlink after creation"
+    return 0
+  fi
   [[ -L "$HOME/.fzf.zsh" ]] || die "~/.fzf.zsh is not a symlink"
 }
 

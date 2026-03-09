@@ -15,6 +15,10 @@ MANAGED
 }
 
 verify_component() {
+  if [[ "$DRY_RUN" == "1" && ! -f "$HOME/.zshrc" ]]; then
+    log "Would verify ~/.zshrc after creation"
+    return 0
+  fi
   [[ -f "$HOME/.zshrc" ]] || die "Missing ~/.zshrc"
 }
 
