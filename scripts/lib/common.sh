@@ -181,3 +181,88 @@ require_repo_file() {
   local path="$CONFIG_REPO/$rel"
   [[ -e "$path" ]] || die "Missing repo-managed file: $path"
 }
+
+current_shell_path() {
+  printf '%s\n' "${SHELL:-unknown}"
+}
+
+login_shell_path() {
+  local username
+  local shell_path=""
+  username="${USER:-$(id -un)}"
+  case "$PLATFORM" in
+    darwin)
+      shell_path="$(dscl . -read "/Users/$username" UserShell 2>/dev/null | awk '/UserShell:/{print $2}')"
+      ;;
+    linux)
+      if command -v getent >/dev/null 2>&1; then
+        shell_path="$(getent passwd "$username" 2>/dev/null | awk -F: '{print $7}')"
+      fi
+      if [[ -z "$shell_path" && -r /etc/passwd ]]; then
+        shell_path="$(awk -F: -v user="$username" '$1 == user {print $7; exit}' /etc/passwd)"
+      fi
+      ;;
+  esac
+  printf '%s\n' "${shell_path:-unknown}"
+}
+
+preferred_zsh_path() {
+  local candidate
+  if command -v zsh >/dev/null 2>&1; then
+    command -v zsh
+    return 0
+  fi
+  for candidate in /opt/homebrew/bin/zsh /home/linuxbrew/.linuxbrew/bin/zsh /usr/local/bin/zsh /bin/zsh; do
+    if [[ -x "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+shell_is_registered() {
+  local shell_path="$1"
+  [[ -n "$shell_path" ]] || return 1
+  [[ -r /etc/shells ]] || return 1
+  grep -Fqx "$shell_path" /etc/shells
+}
+
+print_shell_detection_context() {
+  local current_shell login_shell
+  current_shell="$(current_shell_path)"
+  login_shell="$(login_shell_path)"
+  log "Current shell: $current_shell"
+  log "Login shell: $login_shell"
+}
+
+maybe_print_zsh_switch_notice() {
+  local current_shell login_shell zsh_path
+  current_shell="$(current_shell_path)"
+  login_shell="$(login_shell_path)"
+
+  [[ "$login_shell" != "unknown" ]] || return 0
+  [[ "$login_shell" != */zsh ]] || return 0
+
+  if ! zsh_path="$(preferred_zsh_path 2>/dev/null)"; then
+    warn "zsh is not available in PATH yet; skipping shell-switch guidance"
+    return 0
+  fi
+
+  warn "Default login shell is not zsh"
+  if [[ "$current_shell" != */zsh ]]; then
+    warn "Current shell is also not zsh"
+  fi
+
+  if shell_is_registered "$zsh_path"; then
+    log "Run this command to switch your default shell:"
+    log "  chsh -s $zsh_path"
+  else
+    warn "The detected zsh path is not listed in /etc/shells: $zsh_path"
+    log "If you want to switch, add it to /etc/shells first, then run:"
+    log "  echo '$zsh_path' | sudo tee -a /etc/shells"
+    log "  chsh -s $zsh_path"
+  fi
+
+  log "Log out and back in for the shell change to take effect"
+}
