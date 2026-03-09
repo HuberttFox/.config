@@ -6,11 +6,20 @@ source "$ROOT_DIR/scripts/lib/common.sh"
 initialize_common_state
 
 apply_component() {
-  require_repo_file "git/config"
-  write_managed_file "$HOME/.gitconfig" <<'MANAGED'
+  require_repo_file "git/config.shared"
+  if [[ -f "$CONFIG_REPO/git/config.local" ]]; then
+    write_managed_file "$HOME/.gitconfig" <<'MANAGED'
 [include]
-	path = ~/.config/git/config
+	path = ~/.config/git/config.shared
+[include]
+	path = ~/.config/git/config.local
 MANAGED
+  else
+    write_managed_file "$HOME/.gitconfig" <<'MANAGED'
+[include]
+	path = ~/.config/git/config.shared
+MANAGED
+  fi
 }
 
 verify_component() {
