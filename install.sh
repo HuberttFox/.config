@@ -9,7 +9,7 @@ source "$ROOT_DIR/scripts/lib/common.sh"
 # shellcheck source=scripts/lib/brew.sh
 source "$ROOT_DIR/scripts/lib/brew.sh"
 
-ALL_COMPONENTS=(git zsh zim fzf starship tmux tldr fastfetch lazygit opencode mole)
+ALL_COMPONENTS=(git zsh zim fzf starship tmux tldr fastfetch lazygit codex claude opencode mole)
 SELECTED_COMPONENTS=()
 SKIP_COMPONENTS=()
 DRY_RUN=0
@@ -85,11 +85,13 @@ filter_supported_components() {
   SELECTED_COMPONENTS=("${filtered[@]}")
 }
 
-install_formulae() {
+install_packages() {
   local name
   local script
   local formula
+  local cask
   local formulae=()
+  local casks=()
 
   for name in "${SELECTED_COMPONENTS[@]}"; do
     script="$(component_script "$name")"
@@ -97,17 +99,26 @@ install_formulae() {
       [[ -z "$formula" ]] && continue
       append_unique formulae "$formula"
     done < <("$script" formulae)
+    while IFS= read -r cask; do
+      [[ -z "$cask" ]] && continue
+      append_unique casks "$cask"
+    done < <("$script" casks)
   done
 
-  if [[ ${#formulae[@]} -eq 0 ]]; then
-    log "No formulae to install"
+  if [[ ${#formulae[@]} -eq 0 && ${#casks[@]} -eq 0 ]]; then
+    log "No packages to install"
     return 0
   fi
 
   ensure_brew
   activate_brew_shellenv
   ensure_brew_shellenv_in_zprofile
-  brew_install_formulae "${formulae[@]}"
+  if [[ ${#formulae[@]} -gt 0 ]]; then
+    brew_install_formulae "${formulae[@]}"
+  fi
+  if [[ ${#casks[@]} -gt 0 ]]; then
+    brew_install_casks "${casks[@]}"
+  fi
 }
 
 apply_components() {
@@ -177,7 +188,7 @@ if contains_word "zsh" "${SELECTED_COMPONENTS[@]}"; then
   print_shell_detection_context
 fi
 log "Selected components: ${SELECTED_COMPONENTS[*]}"
-install_formulae
+install_packages
 apply_components
 verify_components
 if contains_word "zsh" "${SELECTED_COMPONENTS[@]}"; then
