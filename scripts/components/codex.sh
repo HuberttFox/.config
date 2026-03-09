@@ -9,7 +9,7 @@ apply_component() {
   require_repo_file "codex/config.toml"
   ensure_symlink "$CONFIG_REPO/codex/config.toml" "$HOME/.codex/config.toml"
   if [[ "$PLATFORM" == "linux" ]]; then
-    ensure_npm_global_package "codex"
+    ensure_npm_global_package "@openai/codex"
   fi
 }
 

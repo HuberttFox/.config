@@ -7,7 +7,7 @@ initialize_common_state
 
 apply_component() {
   if [[ "$PLATFORM" == "linux" ]]; then
-    ensure_npm_global_package "opencode"
+    ensure_npm_global_package "opencode-ai"
   fi
   log "opencode config already lives under ~/.config/opencode"
 }
