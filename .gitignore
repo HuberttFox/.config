@@ -5,13 +5,36 @@
 .zcompdump*
 
 git/config.local
+claude/
+claude.json
+codex/auth.json
+codex/history.jsonl
+codex/log/
+codex/memories/
+codex/models_cache.json
+codex/sessions/
+codex/shell_snapshots/
+codex/state_*.sqlite
+codex/state_*.sqlite-*
+codex/tmp/
+cursor/ai-tracking/
+cursor/extensions/
+cursor/ide_state.json
 iterm2/AppSupport
 iterm2/AppSupport/
 iterm2/sockets/
 iterm2/sockets/**
 mole/*.log
 opencode/node_modules/
+orbstack/bin/
+orbstack/log/
+orbstack/run/
+orbstack/ssh/
+orbstack/vmstate.json
+orbstack/.installid
 raycast/extensions/
 raycast/extensions/node_modules/
+vscode/cli/
+vscode/extensions/
 
 .backup/
