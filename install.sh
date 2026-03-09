@@ -195,6 +195,9 @@ if contains_word "zsh" "${SELECTED_COMPONENTS[@]}"; then
 fi
 if find_brew_bin >/dev/null 2>&1; then
   activate_brew_shellenv
-  ensure_brew_shellenv_for_login_shell
+  ensure_brew_shellenv_for_shells
 fi
 log "Install completed"
+if contains_word "zsh" "${SELECTED_COMPONENTS[@]}"; then
+  start_interactive_zsh_session
+fi

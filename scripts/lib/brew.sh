@@ -86,6 +86,11 @@ ensure_brew_shellenv_for_login_shell() {
   ensure_line_in_file "$target_file" "$line"
 }
 
+ensure_brew_shellenv_for_shells() {
+  ensure_brew_shellenv_in_zprofile
+  ensure_brew_shellenv_for_login_shell
+}
+
 brew_formula_installed() {
   "$BREW_BIN" list --formula "$1" >/dev/null 2>&1
 }
