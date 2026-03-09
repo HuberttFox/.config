@@ -25,7 +25,8 @@ Install a subset:
 ## Notes
 
 - Homebrew formulae are preferred.
-- Homebrew casks are used only for selected macOS tools such as `codex` and `claude-code`.
+- On macOS, `codex` and `claude-code` are installed via Homebrew casks, and `opencode` via Homebrew formula.
+- On Linux, `codex`, `claude-code`, and `opencode` are installed via `npm -g`, and the installer adds the `node` formula as their dependency.
 - Existing files are backed up to `~/.config/.backup/<timestamp>/`.
 - Private state is not overwritten.
 - The installer does not automatically change your default shell to `zsh`.
@@ -35,7 +36,6 @@ Install a subset:
 
 The following tools can keep shared config in this repo, but are not installed by `install.sh`:
 
-- `codex`
 - `raycast`
 - `cursor`
 - `orbstack`
