@@ -72,12 +72,29 @@ brew_cask_installed() {
   "$BREW_BIN" list --cask "$1" >/dev/null 2>&1
 }
 
+brew_bin_dir() {
+  [[ -n "$BREW_BIN" ]] || BREW_BIN="$(find_brew_bin)"
+  dirname "$BREW_BIN"
+}
+
+brew_command_already_available() {
+  local name="$1"
+  local resolved=""
+  local bin_dir=""
+
+  resolved="$(command_path "$name" 2>/dev/null)" || return 1
+  bin_dir="$(brew_bin_dir)"
+  [[ "$resolved" == "$bin_dir/$name" ]]
+}
+
 brew_install_formulae() {
   local formula
   for formula in "$@"; do
     [[ -n "$formula" ]] || continue
     if brew_formula_installed "$formula"; then
       log "Formula already installed: $formula"
+    elif brew_command_already_available "$formula"; then
+      log "Command already available in Homebrew bin: $formula"
     else
       run_cmd "$BREW_BIN" install "$formula"
     fi
