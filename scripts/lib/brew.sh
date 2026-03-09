@@ -68,6 +68,10 @@ brew_formula_installed() {
   "$BREW_BIN" list --formula "$1" >/dev/null 2>&1
 }
 
+brew_cask_installed() {
+  "$BREW_BIN" list --cask "$1" >/dev/null 2>&1
+}
+
 brew_install_formulae() {
   local formula
   for formula in "$@"; do
@@ -76,6 +80,22 @@ brew_install_formulae() {
       log "Formula already installed: $formula"
     else
       run_cmd "$BREW_BIN" install "$formula"
+    fi
+  done
+}
+
+brew_install_casks() {
+  local cask
+  if [[ "$PLATFORM" != "darwin" ]]; then
+    warn "Skipping cask installation on non-macOS platform: $*"
+    return 0
+  fi
+  for cask in "$@"; do
+    [[ -n "$cask" ]] || continue
+    if brew_cask_installed "$cask"; then
+      log "Cask already installed: $cask"
+    else
+      run_cmd "$BREW_BIN" install --cask "$cask"
     fi
   done
 }

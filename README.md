@@ -25,9 +25,9 @@ Install a subset:
 ## Notes
 
 - Homebrew formulae are preferred.
+- Homebrew casks are used only for selected macOS tools such as `codex` and `claude-code`.
 - Existing files are backed up to `~/.config/.backup/<timestamp>/`.
 - Private state is not overwritten.
-- Homebrew cask apps are intentionally excluded from this installer.
 - The installer does not automatically change your default shell to `zsh`.
 - If your login shell is not `zsh`, the installer prints the manual `chsh` command after install.
 
@@ -36,7 +36,6 @@ Install a subset:
 The following tools can keep shared config in this repo, but are not installed by `install.sh`:
 
 - `codex`
-- `claude`
 - `raycast`
 - `cursor`
 - `orbstack`
