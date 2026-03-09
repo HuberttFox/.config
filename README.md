@@ -26,7 +26,7 @@ Install a subset:
 
 - Homebrew formulae are preferred.
 - On macOS, `codex` and `claude-code` are installed via Homebrew casks, and `opencode` via Homebrew formula.
-- On Linux, `@openai/codex`, `@anthropic-ai/claude-code`, and `opencode-ai` are installed via `npm -g`, and the installer adds the `node` formula as their dependency.
+- On Linux, `codex`, `claude-code`, and `opencode` are installed via Homebrew.
 - Existing files are backed up to `~/.config/.backup/<timestamp>/`.
 - Private state is not overwritten.
 - The installer does not automatically change your default shell to `zsh`.
