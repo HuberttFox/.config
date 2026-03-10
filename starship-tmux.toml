@@ -1,6 +1,8 @@
+# Used only inside tmux to keep the pane title and prompt compact.
 add_newline = false
 scan_timeout = 30
 
+# Show only the essentials in tmux panes: path, git state, and Python env.
 format = "$directory$git_branch$git_status$python"
 
 [directory]
@@ -28,6 +30,7 @@ behind = "⇣${count}"
 diverged = "⇕${ahead_count}⇣${behind_count}"
 
 [python]
+# Only show an active virtualenv/conda environment name.
 format = " [$virtualenv]($style)"
 pyenv_version_name = false
 python_binary = ["python", "python3"]
