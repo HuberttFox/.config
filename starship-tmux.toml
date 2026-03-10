@@ -1,22 +1,26 @@
 # Used only inside tmux to keep the pane title and prompt compact.
 add_newline = false
+# Keep prompt rendering snappy in busy repos and remote sessions.
 scan_timeout = 30
 
 # Show only the essentials in tmux panes: path, git state, and Python env.
 format = "$directory$git_branch$git_status$python"
 
 [directory]
+# Show the in-repo path and keep it short so narrow tmux panes stay readable.
 format = " [$path]($style)"
 truncate_to_repo = true
 truncation_length = 2
 style = "bold"
 
 [git_branch]
+# Branch name only, without an extra symbol prefix.
 format = " [$branch]($style)"
 truncation_length = 24
 symbol = ""
 
 [git_status]
+# Compact one-line git summary for dirty trees and ahead/behind state.
 format = " [$all_status$ahead_behind]($style)"
 conflicted = "✖"
 modified = "!"
