@@ -18,7 +18,7 @@ source ~/.config/zsh/aliases.zsh
 source ~/.config/zsh/tools.zsh
 source ~/.config/zsh/prompt.zsh
 
-for fn_file in ~/.config/zsh/functions/*.zsh; do
+for fn_file in ~/.config/zsh/functions/*.zsh(N); do
   [[ -f "$fn_file" ]] || continue
   source "$fn_file"
 done
