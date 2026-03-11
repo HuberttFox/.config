@@ -28,7 +28,7 @@ Install a subset:
 - `zim` downloads `zimfw.zsh`, links `~/.zimrc` to the repo-managed config, and generates `~/.zim/init.zsh` without rewriting `~/.zshrc`.
 - `tmux` installs TPM (`~/.tmux/plugins/tpm`) before loading the repo-managed tmux config.
 - `vim`, `neovim`, and `yazi` are installed via Homebrew formulae and only verified for command availability.
-- `iterm2` and `kitty` are installed on macOS via Homebrew casks.
+- `iterm2`, `kitty`, and `alacritty` are installed on macOS via Homebrew casks.
 - On macOS, `codex` and `claude-code` are installed via Homebrew casks, and `opencode` via Homebrew formula.
 - On Linux, `codex`, `claude-code`, and `opencode` are installed via Homebrew.
 - Existing files are backed up to `~/.config/.backup/<timestamp>/`.
