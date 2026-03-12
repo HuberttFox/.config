@@ -12,5 +12,8 @@ trust_level = "trusted"
 [projects."/Users/shiujenyu/Documents/my-brain"]
 trust_level = "trusted"
 
+[projects."/Users/shiujenyu/.config"]
+trust_level = "trusted"
+
 [notice.model_migrations]
 "gpt-5.2-codex" = "gpt-5.3-codex"
