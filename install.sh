@@ -22,6 +22,12 @@ Usage: ./install.sh [--all] [--only a,b,c] [--skip a,b,c] [--dry-run] [--force]
 USAGE
 }
 
+require_non_root_user() {
+  if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+    die "This installer must be run as a non-root user. Re-run it from your regular user account."
+  fi
+}
+
 parse_csv_into_array() {
   local csv="$1"
   local item
@@ -179,6 +185,7 @@ export DRY_RUN FORCE PLATFORM
 initialize_common_state
 
 [[ "$(basename "$ROOT_DIR")" == ".config" ]] || warn "Expected repo root to be named .config, got: $ROOT_DIR"
+require_non_root_user
 collect_selected_components
 filter_supported_components
 
