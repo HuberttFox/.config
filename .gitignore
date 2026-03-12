@@ -38,3 +38,24 @@ vscode/cli/
 vscode/extensions/
 
 .backup/
+dconf/
+ibus/
+pulse/
+monitors.xml
+monitors.xml~
+user-dirs.dirs
+user-dirs.locale
+GNOME-xdg-terminals.list
+ubuntu-xdg-terminals.list
+xdg-terminals.list
+gnome-initial-setup-done
+gnome-session/
+goa-1.0/
+gtk-3.0/bookmarks
+tiling-assistant/
+update-notifier/
+.gsd-keyboard.settings-ported
+evolution/
+rustdesk/*.toml
+nautilus/
+systemd/
