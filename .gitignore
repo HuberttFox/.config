@@ -26,6 +26,7 @@ iterm2/sockets/
 iterm2/sockets/**
 mole/*.log
 opencode/node_modules/
+opencode/opencode.json
 orbstack/bin/
 orbstack/log/
 orbstack/run/
