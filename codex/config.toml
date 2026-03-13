@@ -1,4 +1,4 @@
-model = "gpt-5.4"
+model = "gpt-5.3-codex"
 model_reasoning_effort = "medium"
 [projects."/Users/shiujenyu"]
 trust_level = "untrusted"
@@ -16,6 +16,9 @@ trust_level = "trusted"
 trust_level = "trusted"
 
 [projects."/opt"]
+trust_level = "trusted"
+
+[projects."/home/hubert/.config"]
 trust_level = "trusted"
 
 [notice.model_migrations]

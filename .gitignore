@@ -5,6 +5,7 @@
 .zcompdump*
 
 git/config.local
+zsh/env.local.zsh
 claude/
 claude.json
 codex/auth.json
@@ -26,7 +27,6 @@ iterm2/sockets/
 iterm2/sockets/**
 mole/*.log
 opencode/node_modules/
-opencode/opencode.json
 orbstack/bin/
 orbstack/log/
 orbstack/run/

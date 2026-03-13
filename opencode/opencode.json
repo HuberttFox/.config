@@ -1,0 +1,24 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "cliproxy": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "CliProxy",
+      "options": {
+        "baseURL": "https://cliproxy-api.jenyu.cn/v1",
+        "apiKey": "env:CLIPROXY_API_KEY"
+      },
+      "models": {
+        "claude-opus-4-6-thinking": {},
+        "claude-sonnet-4-6": {},
+        "deepseek-chat": {},
+        "deepseek-reasoner": {},
+        "gemini-3.1-flash-image": {},
+        "gemini-3.1-pro-high": {},
+        "gemini-3.1-pro-low": {},
+        "gpt-5.3-codex": {},
+        "gpt-5.3-codex-spark": {}
+      }
+    }
+  }
+}
