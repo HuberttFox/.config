@@ -105,4 +105,4 @@ Python scripts (e.g., `tmux/scripts/session_manager.py`) must follow modern Pyth
 2. **Path Resolution**: Always use absolute paths derived from `$ROOT_DIR` or `$CONFIG_REPO`.
 3. **Privacy**: Do not commit secrets, API keys, or machine-specific paths to shared config files.
 4. **Gitignore**: If a tool requires private state, runtime auth files, or extensions, ensure the relevant directories are added to `.gitignore`.
-5. **Opencode Skills**: When interacting with remote servers, consult `opencode/skills/server-connection-ops/SKILL.md` for proper connection workflows.
+5. **Remote Operations**: Never store fixed credentials in this repository. Use environment-managed secrets or local-only secure notes outside Git.
