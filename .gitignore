@@ -19,6 +19,7 @@ codex/shell_snapshots/
 codex/state_*.sqlite
 codex/state_*.sqlite-*
 codex/tmp/
+Bitwarden CLI/data.json
 cursor/ai-tracking/
 cursor/extensions/
 cursor/ide_state.json
