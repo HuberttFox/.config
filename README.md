@@ -30,6 +30,7 @@ Install a subset:
 - `vim`, `neovim`, `yazi`, and `neofetch` are installed via Homebrew formulae and only verified for command availability.
 - `iterm2` and `alacritty` are installed on macOS via Homebrew casks.
 - `kitty` is installed on macOS via Homebrew cask, and on Linux via kitty's official binary installer, then linked into `~/.local/bin`.
+- `finicky` is installed on macOS via Homebrew cask and provides URL routing for the browser-mode workflow.
 - On macOS, `codex` and `claude-code` are installed via Homebrew casks, and `opencode` via Homebrew formula.
 - On Linux, `codex`, `claude-code`, and `opencode` are installed via Homebrew.
 - Existing files are backed up to `~/.config/.backup/<timestamp>/`.
@@ -53,5 +54,21 @@ Current sync-only files in this repo:
 - `cursor/argv.json`
 - `vscode/argv.json`
 - `raycast/ai/providers.yaml`
+
+## Finicky + Raycast (macOS only)
+
+This setup uses Finicky as the URL router and Raycast Script Commands to toggle the active browser mode.
+
+Configuration:
+
+- Finicky configs live at `finicky/finicky.dia.js` and `finicky/finicky.atlas.js`.
+- The active config is linked at `~/.finicky.js` by the installer or the mode script.
+- Modes are controlled by swapping the `~/.finicky.js` symlink (values: `dia`, `atlas`).
+- The helper script is `scripts/browser-mode` (macOS only) and restarts Finicky.
+- Notifications are sent via `terminal-notifier` when available, otherwise via `osascript`.
+
+Suggested Raycast Script Commands:
+
+- Use `raycast/script-commands/browser-mode.sh` and pick from the browser list.
 
 Runtime state, auth files, logs, extensions, sessions, VM state, and other machine-specific data for these tools should stay out of Git.
