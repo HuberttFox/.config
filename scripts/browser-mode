@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+mode="${1:-}"
+
+require_darwin() {
+  if [[ "$(uname -s)" != "Darwin" ]]; then
+    printf 'browser-mode is supported on macOS only\n' >&2
+    exit 1
+  fi
+}
+
+notify_mode() {
+  local value="$1"
+  if command -v terminal-notifier >/dev/null 2>&1; then
+    terminal-notifier -title "Finicky" -message "Browser mode: $value" >/dev/null 2>&1 || true
+    return
+  fi
+
+  osascript -e 'on run argv
+display notification ("Browser mode: " & item 1 of argv) with title "Finicky"
+end run' "$value" >/dev/null 2>&1 || true
+}
+
+resolve_bundle_id() {
+  local value="$1"
+  local bundle_id="$value"
+
+  if [[ "$bundle_id" != *.* ]]; then
+    bundle_id="$(osascript -e "id of app \"$value\"" 2>/dev/null || true)"
+  fi
+
+  if [[ -z "$bundle_id" ]]; then
+    printf 'Unable to resolve bundle id for %s\n' "$value" >&2
+    exit 1
+  fi
+
+  printf '%s\n' "$bundle_id"
+}
+
+write_custom_config() {
+  local bundle_id="$1"
+  local target="$HOME/.config/finicky/finicky.custom.js"
+  local tmp
+
+  tmp="$(mktemp)"
+  cat > "$tmp" <<EOF
+export default {
+  options: {
+    keepRunning: true,
+  },
+  defaultBrowser: {
+    name: "$bundle_id",
+    appType: "bundleId",
+  },
+  handlers: [
+    {
+      match: () => true,
+      browser: {
+        name: "$bundle_id",
+        appType: "bundleId",
+      },
+    },
+  ],
+};
+EOF
+  mv "$tmp" "$target"
+  printf '%s\n' "$target"
+}
+
+set_mode() {
+  local value="$1"
+  require_darwin
+  local target
+
+  case "$value" in
+    dia) target="$HOME/.config/finicky/finicky.dia.js" ;;
+    atlas) target="$HOME/.config/finicky/finicky.atlas.js" ;;
+    *)
+      target="$(write_custom_config "$(resolve_bundle_id "$value")")"
+      ;;
+  esac
+
+  ln -sf "$target" "$HOME/.finicky.js"
+  touch "$HOME/.finicky.js"
+  if pgrep -x "Finicky" >/dev/null 2>&1; then
+    killall -HUP Finicky >/dev/null 2>&1 || true
+  fi
+  notify_mode "$value"
+}
+
+case "$mode" in
+  dia|atlas)
+    set_mode "$mode"
+    ;;
+  *)
+    set_mode "$mode"
+    ;;
+esac
