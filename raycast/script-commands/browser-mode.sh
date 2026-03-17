@@ -41,6 +41,7 @@ if [[ -z "$mode" ]]; then
   fi
 
   choice=$(osascript -e 'on run argv
+tell application "System Events" to activate
 set appList to {}
 repeat with appName in argv
   set end of appList to appName
