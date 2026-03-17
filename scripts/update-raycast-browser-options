@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_PATH="$HOME/.config/raycast/script-commands/browser-mode.sh"
+HEADER_PREFIX="# @raycast.argument1"
+
+if [[ ! -f "$SCRIPT_PATH" ]]; then
+  printf 'Missing Raycast script: %s\n' "$SCRIPT_PATH" >&2
+  exit 1
+fi
+
+collect_apps() {
+  local app
+  local base
+  local -a candidates
+  local -a results
+
+  candidates=(
+    "Dia"
+    "ChatGPT Atlas"
+    "Arc"
+    "Google Chrome"
+    "Firefox"
+    "Safari"
+    "Microsoft Edge"
+    "Brave Browser"
+    "Vivaldi"
+    "Opera"
+    "Zen"
+  )
+
+  for base in "/Applications" "$HOME/Applications"; do
+    for app in "${candidates[@]}"; do
+      if [[ -d "$base/${app}.app" ]]; then
+        results+=("$app")
+      fi
+    done
+  done
+
+  if [[ ${#results[@]} -eq 0 ]]; then
+    results=("Safari")
+  fi
+
+  printf '%s\n' "${results[@]}" | awk '!seen[$0]++'
+}
+
+build_dropdown_line() {
+  local app
+  local line
+  local data=()
+
+  while IFS= read -r app; do
+    [[ -z "$app" ]] && continue
+    data+=("{\"title\": \"$app\", \"value\": \"$app\"}")
+  done
+
+  local joined=""
+  if [[ ${#data[@]} -gt 0 ]]; then
+    joined="${data[0]}"
+    for ((i = 1; i < ${#data[@]}; i++)); do
+      joined+=" , ${data[i]}"
+    done
+  fi
+
+  line="$HEADER_PREFIX { \"type\": \"dropdown\", \"placeholder\": \"Select browser\", \"data\": [ ${joined} ] }"
+  printf '%s\n' "$line"
+}
+
+dropdown_line="$(collect_apps | build_dropdown_line)"
+
+tmp="$(mktemp)"
+while IFS= read -r line; do
+  if [[ "$line" == "$HEADER_PREFIX"* ]]; then
+    printf '%s\n' "$dropdown_line" >> "$tmp"
+  else
+    printf '%s\n' "$line" >> "$tmp"
+  fi
+done < "$SCRIPT_PATH"
+
+mv "$tmp" "$SCRIPT_PATH"
+
+printf 'Updated Raycast browser list in %s\n' "$SCRIPT_PATH"
