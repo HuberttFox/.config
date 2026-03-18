@@ -10,7 +10,12 @@ apply_component() {
 }
 
 verify_component() {
+  require_repo_file "opencode/opencode.json"
   ensure_command_available "opencode"
+
+  if [[ -z "${CLIPROXY_API_KEY:-}" ]]; then
+    warn "CLIPROXY_API_KEY is not set; cliproxy-backed opencode requests will fail until it is exported"
+  fi
 }
 
 case "${1:-}" in
