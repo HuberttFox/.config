@@ -103,6 +103,10 @@ brew_cask_installed() {
   "$BREW_BIN" list --cask "$1" >/dev/null 2>&1
 }
 
+brew_tap_installed() {
+  "$BREW_BIN" tap | grep -Fxq "$1"
+}
+
 brew_bin_dir() {
   [[ -n "$BREW_BIN" ]] || BREW_BIN="$(find_brew_bin)"
   dirname "$BREW_BIN"
@@ -128,6 +132,19 @@ brew_install_formulae() {
       log "Command already available in Homebrew bin: $formula"
     else
       run_cmd "$BREW_BIN" install "$formula"
+    fi
+  done
+  activate_brew_shellenv
+}
+
+brew_install_taps() {
+  local tap
+  for tap in "$@"; do
+    [[ -n "$tap" ]] || continue
+    if brew_tap_installed "$tap"; then
+      log "Tap already added: $tap"
+    else
+      run_cmd "$BREW_BIN" tap "$tap"
     fi
   done
   activate_brew_shellenv

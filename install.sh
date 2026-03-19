@@ -9,7 +9,7 @@ source "$ROOT_DIR/scripts/lib/common.sh"
 # shellcheck source=scripts/lib/brew.sh
 source "$ROOT_DIR/scripts/lib/brew.sh"
 
-ALL_COMPONENTS=(git zsh zim fzf starship tmux tldr fastfetch neofetch lazygit vim neovim yazi iterm2 kitty alacritty finicky codex claude opencode mole)
+ALL_COMPONENTS=(git zsh zim fzf starship tmux tldr fastfetch neofetch lazygit vim neovim yazi iterm2 kitty alacritty finicky codex claude opencode mole ccswitch)
 SELECTED_COMPONENTS=()
 SKIP_COMPONENTS=()
 DRY_RUN=0
@@ -98,9 +98,18 @@ install_packages() {
   local cask
   local formulae=()
   local casks=()
+  local taps=()
+  local tap
+  local taps_output
 
   for name in "${SELECTED_COMPONENTS[@]}"; do
     script="$(component_script "$name")"
+    if taps_output="$($script taps 2>/dev/null)"; then
+      while IFS= read -r tap; do
+        [[ -z "$tap" ]] && continue
+        append_unique taps "$tap"
+      done <<< "$taps_output"
+    fi
     while IFS= read -r formula; do
       [[ -z "$formula" ]] && continue
       append_unique formulae "$formula"
@@ -111,13 +120,16 @@ install_packages() {
     done < <("$script" casks)
   done
 
-  if [[ ${#formulae[@]} -eq 0 && ${#casks[@]} -eq 0 ]]; then
+  if [[ ${#taps[@]} -eq 0 && ${#formulae[@]} -eq 0 && ${#casks[@]} -eq 0 ]]; then
     log "No packages to install"
     return 0
   fi
 
   ensure_brew
   activate_brew_shellenv
+  if [[ ${#taps[@]} -gt 0 ]]; then
+    brew_install_taps "${taps[@]}"
+  fi
   if [[ ${#formulae[@]} -gt 0 ]]; then
     brew_install_formulae "${formulae[@]}"
   fi
