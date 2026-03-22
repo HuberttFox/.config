@@ -68,6 +68,7 @@ verify_kitty_install() {
 case "${1:-}" in
   platforms) printf 'darwin\nlinux\n' ;;
   formulae) ;;
+  taps) ;;
   casks)
     [[ "$PLATFORM" == "darwin" ]] && printf 'kitty\n'
     ;;

@@ -23,6 +23,7 @@ case "${1:-}" in
   formulae)
     printf 'opencode\n'
     ;;
+  taps) ;;
   casks) ;;
   apply) apply_component ;;
   verify) verify_component ;;
