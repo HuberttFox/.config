@@ -20,6 +20,7 @@ case "${1:-}" in
       printf 'claude-code\n'
     fi
     ;;
+  taps) ;;
   casks)
     if [[ "$PLATFORM" == "darwin" ]]; then
       printf 'claude-code\n'

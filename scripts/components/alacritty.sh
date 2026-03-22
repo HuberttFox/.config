@@ -8,6 +8,7 @@ initialize_common_state
 case "${1:-}" in
   platforms) printf 'darwin\n' ;;
   formulae) ;;
+  taps) ;;
   casks) printf 'alacritty\n' ;;
   apply) : ;;
   verify) : ;;

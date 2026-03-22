@@ -67,6 +67,7 @@ verify_component() {
 case "${1:-}" in
   platforms) printf 'darwin\nlinux\n' ;;
   formulae) printf 'tmux\n' ;;
+  taps) ;;
   casks) ;;
   apply) apply_component ;;
   verify) verify_component ;;

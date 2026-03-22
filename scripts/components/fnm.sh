@@ -8,6 +8,7 @@ initialize_common_state
 case "${1:-}" in
   platforms) printf 'darwin\nlinux\n' ;;
   formulae) printf 'fnm\n' ;;
+  taps) ;;
   casks) ;;
   apply) : ;;
   verify)

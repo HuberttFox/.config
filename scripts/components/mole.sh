@@ -16,6 +16,7 @@ verify_component() {
 case "${1:-}" in
   platforms) printf 'darwin\n' ;;
   formulae) printf 'mole\n' ;;
+  taps) ;;
   casks) ;;
   apply) apply_component ;;
   verify) verify_component ;;

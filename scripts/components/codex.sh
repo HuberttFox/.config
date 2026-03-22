@@ -26,6 +26,7 @@ case "${1:-}" in
       printf 'codex\n'
     fi
     ;;
+  taps) ;;
   casks)
     if [[ "$PLATFORM" == "darwin" ]]; then
       printf 'codex\n'

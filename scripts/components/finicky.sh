@@ -28,6 +28,7 @@ verify_component() {
 case "${1:-}" in
   platforms) printf 'darwin\n' ;;
   formulae) ;;
+  taps) ;;
   casks) printf 'finicky\n' ;;
   apply) apply_component ;;
   verify) verify_component ;;
