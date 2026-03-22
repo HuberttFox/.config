@@ -4,21 +4,21 @@
     "cliproxy"
   ],
   "model": "cliproxy/gpt-5.3-codex",
-  "small_model": "cliproxy/gpt-5.3-codex-spark",
   "provider": {
     "cliproxy": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "CliProxy",
-      "options": {
-        "baseURL": "https://cliproxy-api.jenyu.cn/v1",
-        "apiKey": "{env:CLIPROXY_API_KEY}"
-      },
       "models": {
         "gpt-5.2": {},
         "gpt-5.2-codex": {},
         "gpt-5.3-codex": {},
         "gpt-5.3-codex-spark": {}
+      },
+      "name": "CliProxy",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "apiKey": "{env:CLIPROXY_API_KEY}",
+        "baseURL": "https://cliproxy-api.jenyu.cn/v1"
       }
     }
-  }
+  },
+  "small_model": "cliproxy/gpt-5.3-codex-spark"
 }
