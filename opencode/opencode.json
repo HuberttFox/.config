@@ -10,7 +10,16 @@
         "gpt-5.2": {},
         "gpt-5.2-codex": {},
         "gpt-5.3-codex": {},
-        "gpt-5.3-codex-spark": {}
+	"gpt-5.3-codex-low": {},
+	"gpt-5.3-codex-medium": {},
+	"gpt-5.3-codex-high": {},
+	"gpt-5.3-codex-xhigh": {}, 
+	"gpt-5.4-mini": {},
+	"gpt-5.4": {},
+	"gpt-5.4-low": {},
+	"gpt-5.4-medium": {},
+	"gpt-5.4-high": {},
+	"gpt-5.4-xhigh": {}
       },
       "name": "CliProxy",
       "npm": "@ai-sdk/openai-compatible",
