@@ -9,7 +9,6 @@ zsh/env.local.zsh
 claude/
 claude.json
 codex/auth.json
-codex/config.toml
 codex/history.jsonl
 codex/log/
 codex/memories/
