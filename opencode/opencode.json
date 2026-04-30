@@ -19,7 +19,9 @@
 	"gpt-5.4-low": {},
 	"gpt-5.4-medium": {},
 	"gpt-5.4-high": {},
-	"gpt-5.4-xhigh": {}
+	"gpt-5.4-xhigh": {},
+	"deepseek-v4-flash": {},
+	"deepseek-v4-pro": {}
       },
       "name": "CliProxy",
       "npm": "@ai-sdk/openai-compatible",
