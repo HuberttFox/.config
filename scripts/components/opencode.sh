@@ -6,7 +6,21 @@ source "$ROOT_DIR/scripts/lib/common.sh"
 initialize_common_state
 
 apply_component() {
+  local rtk_bin=""
+
   log "opencode config already lives under ~/.config/opencode"
+
+  if ! rtk_bin="$(command_path rtk 2>/dev/null)"; then
+    warn "rtk not found; skipping OpenCode integration via rtk init"
+    return 0
+  fi
+
+  if ! command_path opencode >/dev/null 2>&1; then
+    warn "opencode not found; skipping rtk OpenCode integration"
+    return 0
+  fi
+
+  run_cmd "$rtk_bin" init -g --opencode
 }
 
 verify_component() {
