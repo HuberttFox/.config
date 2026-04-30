@@ -1,5 +1,9 @@
 export LANG=en_US.UTF-8
 
+if [[ -d "$HOME/.local/bin" && ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+  export PATH="$HOME/.local/bin:$PATH"
+fi
+
 # Keep duplicate commands from piling up in history.
 setopt HIST_IGNORE_ALL_DUPS
 
