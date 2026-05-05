@@ -7,6 +7,14 @@ initialize_common_state
 
 apply_component() {
   require_repo_file "zsh/zshrc"
+  require_repo_file "zsh/zshenv"
+
+  write_managed_file "$HOME/.zshenv" <<'MANAGED'
+if [[ -f ~/.config/zsh/zshenv ]]; then
+  source ~/.config/zsh/zshenv
+fi
+MANAGED
+
   write_managed_file "$HOME/.zshrc" <<'MANAGED'
 if [[ -f ~/.config/zsh/zshrc ]]; then
   source ~/.config/zsh/zshrc
@@ -15,6 +23,12 @@ MANAGED
 }
 
 verify_component() {
+  if [[ "$DRY_RUN" == "1" && ! -f "$HOME/.zshenv" ]]; then
+    log "Would verify ~/.zshenv after creation"
+  else
+    [[ -f "$HOME/.zshenv" ]] || die "Missing ~/.zshenv"
+  fi
+
   if [[ "$DRY_RUN" == "1" && ! -f "$HOME/.zshrc" ]]; then
     log "Would verify ~/.zshrc after creation"
     return 0
