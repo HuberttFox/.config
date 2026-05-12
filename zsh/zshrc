@@ -14,6 +14,9 @@ fi
 source ${ZIM_HOME}/init.zsh
 
 source ~/.config/zsh/env.zsh
+if [[ -f ~/.config/zsh/env.local.zsh ]]; then
+  source ~/.config/zsh/env.local.zsh
+fi
 source ~/.config/zsh/aliases.zsh
 source ~/.config/zsh/tools.zsh
 source ~/.config/zsh/prompt.zsh
