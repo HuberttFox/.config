@@ -29,8 +29,7 @@
 - 优先使用 Homebrew formula 安装软件。
 - `zim` 会下载 `zimfw.zsh`，将 `~/.zimrc` 链接到仓库管理的配置，并生成 `~/.zim/init.zsh`，但不会重写 `~/.zshrc`。
 - `tmux` 会先安装 TPM（`~/.tmux/plugins/tpm`），再加载仓库管理的 tmux 配置。
-- `vim`、`neovim`、`yazi` 和 `neofetch` 通过 Homebrew formula 安装，只验证命令是否可用。
-- `iterm2` 和 `alacritty` 在 macOS 上通过 Homebrew cask 安装。
+- `vim` 和 `yazi` 通过 Homebrew formula 安装，只验证命令是否可用。
 - `kitty` 在 macOS 上通过 Homebrew cask 安装；在 Linux 上使用 Kitty 官方安装脚本，并链接到 `~/.local/bin`。
 - `finicky` 在 macOS 上通过 Homebrew cask 安装，为浏览器模式工作流提供 URL 路由。
 - `install.sh` 不安装 Claude Code、Codex 和 OpenCode 可执行文件；请单独安装。
@@ -42,7 +41,7 @@
 
 ## 仅限本地的应用配置
 
-`codex/`、`opencode/`、`cursor/`、`orbstack/` 和 `vscode/` 下的配置及运行时数据仅保留在本地，并由 Git 忽略。本仓库不安装、同步或管理这些应用。
+`codex/`、`opencode/`、`cursor/`、`orbstack/`、`vscode/`、`iterm2/`、`alacritty/`、`nvim/` 和 `neofetch/` 下的配置及运行时数据仅保留在本地，并由 Git 忽略。本仓库不安装、同步或管理这些应用，也不会删除已安装的应用或本地数据。
 
 `raycast/ai/providers.yaml` 包含 Provider 凭据，因此也只保留在本地。
 

@@ -29,8 +29,7 @@ Install a subset:
 - Homebrew formulae are preferred.
 - `zim` downloads `zimfw.zsh`, links `~/.zimrc` to the repo-managed config, and generates `~/.zim/init.zsh` without rewriting `~/.zshrc`.
 - `tmux` installs TPM (`~/.tmux/plugins/tpm`) before loading the repo-managed tmux config.
-- `vim`, `neovim`, `yazi`, and `neofetch` are installed via Homebrew formulae and only verified for command availability.
-- `iterm2` and `alacritty` are installed on macOS via Homebrew casks.
+- `vim` and `yazi` are installed via Homebrew formulae and only verified for command availability.
 - `kitty` is installed on macOS via Homebrew cask, and on Linux via kitty's official binary installer, then linked into `~/.local/bin`.
 - `finicky` is installed on macOS via Homebrew cask and provides URL routing for the browser-mode workflow.
 - Claude Code, Codex, and OpenCode executables are not installed by `install.sh`; install them separately.
@@ -42,7 +41,7 @@ Install a subset:
 
 ## Local-only application config
 
-Configuration and runtime data under `codex/`, `opencode/`, `cursor/`, `orbstack/`, and `vscode/` are local-only and ignored by Git. This repository does not install, synchronize, or manage those applications.
+Configuration and runtime data under `codex/`, `opencode/`, `cursor/`, `orbstack/`, `vscode/`, `iterm2/`, `alacritty/`, `nvim/`, and `neofetch/` are local-only and ignored by Git. This repository does not install, synchronize, or manage those applications. Existing applications and local data are not removed.
 
 `raycast/ai/providers.yaml` is also local-only because it contains provider credentials.
 

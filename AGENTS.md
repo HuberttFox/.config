@@ -72,7 +72,7 @@ A valid component script MUST implement a specific `case` structure handling the
 4.  `apply`: Execute logic to link files or generate configurations. 
 5.  `verify`: Check if the installation was successful. MUST respect `$DRY_RUN == 1` to skip physical file checks during previews.
 
-*Reference Implementation (e.g., `scripts/components/alacritty.sh`):*
+*Reference Implementation (e.g., `scripts/components/lazygit.sh`):*
 ```bash
 case "${1:-}" in
   platforms) printf 'darwin\nlinux\n' ;;

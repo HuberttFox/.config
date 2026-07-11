@@ -15,10 +15,10 @@ orbstack/
 vscode/
 finicky/finicky.custom.js
 Bitwarden CLI/data.json
-iterm2/AppSupport
-iterm2/AppSupport/
-iterm2/sockets/
-iterm2/sockets/**
+iterm2/
+alacritty/
+nvim/
+neofetch/
 mole/*.log
 caveman/.caveman-history.jsonl
 fish/
