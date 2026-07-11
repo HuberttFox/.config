@@ -34,34 +34,17 @@
 - `kitty` 在 macOS 上通过 Homebrew cask 安装；在 Linux 上使用 Kitty 官方安装脚本，并链接到 `~/.local/bin`。
 - `finicky` 在 macOS 上通过 Homebrew cask 安装，为浏览器模式工作流提供 URL 路由。
 - `install.sh` 不安装 Claude Code、Codex 和 OpenCode 可执行文件；请单独安装。
-- Codex 组件只会将仓库中的配置链接到 `~/.codex/config.toml`。
-- OpenCode 组件将配置保存在 `~/.config/opencode`；仅当 RTK 和 OpenCode 可执行文件都已存在时，才执行 RTK 集成。
 - 已有文件会备份到 `~/.config/.backup/<timestamp>/`。
 - 私有状态不会被覆盖。
 - 如果选择了 `zsh`，但当前登录 Shell 不是 `zsh`，安装器会尝试自动执行 `chsh -s <resolved-zsh-path>`。
 - 如果对应的 `zsh` 路径不在 `/etc/shells` 中，安装器会先尝试注册该路径，并可能要求输入 `sudo` 密码。
 - 软件包安装和 Shell 切换完成后，安装器会把 `brew shellenv` 写入与当前登录 Shell 对应的配置文件。
 
-## 仅同步配置
+## 仅限本地的应用配置
 
-以下工具可将共享配置保存在本仓库中，但不会由 `install.sh` 安装：
+`codex/`、`opencode/`、`cursor/`、`orbstack/` 和 `vscode/` 下的配置及运行时数据仅保留在本地，并由 Git 忽略。本仓库不安装、同步或管理这些应用。
 
-- `codex`
-- `opencode`
-- `raycast`
-- `cursor`
-- `orbstack`
-- `vscode`
-
-Claude Code 没有安装组件，因为本仓库目前不管理共享的 Claude 运行时配置。
-
-当前仅同步的文件：
-
-- `codex/config.toml`
-- `opencode/opencode.json`
-- `cursor/argv.json`
-- `vscode/argv.json`
-- `raycast/ai/providers.yaml` 包含 Provider 凭据，因此只保留在本地。
+`raycast/ai/providers.yaml` 包含 Provider 凭据，因此也只保留在本地。
 
 ## Finicky + Raycast（仅 macOS）
 

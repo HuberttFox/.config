@@ -34,34 +34,17 @@ Install a subset:
 - `kitty` is installed on macOS via Homebrew cask, and on Linux via kitty's official binary installer, then linked into `~/.local/bin`.
 - `finicky` is installed on macOS via Homebrew cask and provides URL routing for the browser-mode workflow.
 - Claude Code, Codex, and OpenCode executables are not installed by `install.sh`; install them separately.
-- The Codex component only links the tracked config to `~/.codex/config.toml`.
-- The OpenCode component keeps config under `~/.config/opencode` and runs RTK integration only when both executables already exist.
 - Existing files are backed up to `~/.config/.backup/<timestamp>/`.
 - Private state is not overwritten.
 - If `zsh` is selected and your login shell is not `zsh`, the installer attempts `chsh -s <resolved-zsh-path>` automatically.
 - If that `zsh` path is missing from `/etc/shells`, the installer tries to register it first and may prompt for your `sudo` password.
 - After package installation and shell switching, the installer writes `brew shellenv` to the profile file that matches your current login shell.
 
-## Sync-only configs
+## Local-only application config
 
-The following tools can keep shared config in this repo, but are not installed by `install.sh`:
+Configuration and runtime data under `codex/`, `opencode/`, `cursor/`, `orbstack/`, and `vscode/` are local-only and ignored by Git. This repository does not install, synchronize, or manage those applications.
 
-- `codex`
-- `opencode`
-- `raycast`
-- `cursor`
-- `orbstack`
-- `vscode`
-
-Claude Code has no installer component because this repository does not manage shared Claude runtime configuration.
-
-Current sync-only files in this repo:
-
-- `codex/config.toml`
-- `opencode/opencode.json`
-- `cursor/argv.json`
-- `vscode/argv.json`
-- `raycast/ai/providers.yaml` is local-only because it contains provider credentials.
+`raycast/ai/providers.yaml` is also local-only because it contains provider credentials.
 
 ## Finicky + Raycast (macOS only)
 
