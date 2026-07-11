@@ -1,5 +1,12 @@
-model = "gpt-5.4"
+model = "gpt-5.6-sol"
+model_provider = "sub2api"
 model_reasoning_effort = "medium"
+
+[model_providers.sub2api]
+name = "sub2api"
+base_url = "https://sub2api.sivla.top/v1"
+wire_api = "responses"
+
 [projects."/Users/shiujenyu"]
 trust_level = "untrusted"
 
@@ -21,6 +28,12 @@ trust_level = "trusted"
 [projects."/home/hubert/.config"]
 trust_level = "trusted"
 
+[projects."/Users/shiujenyu/my-brain"]
+trust_level = "trusted"
+
 [notice.model_migrations]
-"gpt-5.2-codex" = "gpt-5.3-codex"
-"gpt-5.3-codex" = "gpt-5.4"
+"gpt-5.4-mini" = "deepseek-v4-flash"
+"gpt-5.4" = "deepseek-v4-pro"
+
+[tui.model_availability_nux]
+"gpt-5.5" = 2
