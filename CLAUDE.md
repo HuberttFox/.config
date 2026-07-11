@@ -20,7 +20,7 @@ This is a personal dotfiles and machine bootstrap repository intended to live at
 ./install.sh --only zsh,tmux,fzf --dry-run
 
 # Skip components from otherwise full selection
-./install.sh --all --skip finicky,iterm2 --dry-run
+./install.sh --all --skip finicky,kitty --dry-run
 
 # Lint one shell script
 shellcheck scripts/components/zsh.sh
@@ -76,7 +76,7 @@ Respect `DRY_RUN=1` in component logic. In dry-run mode, avoid physical file che
 
 Tracked config includes terminal configs, tmux config/scripts, zsh config, Finicky configs, and Raycast helper scripts.
 
-The `codex/`, `opencode/`, `cursor/`, `orbstack/`, and `vscode/` directories are entirely local and ignored. Private or machine-specific state is also ignored, including local Git config, zsh local env, Claude local state, Fish/uv/Serena state, Raycast credentials/extensions, logs, and `.backup/`.
+The `codex/`, `opencode/`, `cursor/`, `orbstack/`, `vscode/`, `iterm2/`, `alacritty/`, `nvim/`, and `neofetch/` directories are entirely local and ignored. Private or machine-specific state is also ignored, including local Git config, zsh local env, Claude local state, Fish/uv/Serena state, Raycast credentials/extensions, logs, and `.backup/`.
 
 ## Existing agent guidance
 
