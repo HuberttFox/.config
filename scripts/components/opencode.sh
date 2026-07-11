@@ -24,23 +24,19 @@ apply_component() {
 }
 
 verify_component() {
+  local resolved=""
+
   require_repo_file "opencode/opencode.json"
-  ensure_command_available "opencode"
-
-  if ! grep -Fq '"apiKey": "{env:CLIPROXY_API_KEY}"' "$CONFIG_REPO/opencode/opencode.json"; then
-    warn "opencode/opencode.json is not using {env:CLIPROXY_API_KEY}; avoid storing the cliproxy key in plaintext"
-  fi
-
-  if [[ -z "${CLIPROXY_API_KEY:-}" ]]; then
-    warn "CLIPROXY_API_KEY is not set; cliproxy-backed opencode requests will fail until it is exported"
+  if resolved="$(command_path opencode 2>/dev/null)"; then
+    log "OpenCode command available: $resolved"
+  else
+    warn "OpenCode is not installed; repository config remains available for future use"
   fi
 }
 
 case "${1:-}" in
   platforms) printf 'darwin\nlinux\n' ;;
-  formulae)
-    printf 'opencode\n'
-    ;;
+  formulae) ;;
   taps) ;;
   casks) ;;
   apply) apply_component ;;
