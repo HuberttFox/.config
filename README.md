@@ -1,5 +1,7 @@
 # dotfiles bootstrap
 
+**English** | [简体中文](README.zh-CN.md)
+
 This repository is intended to live at `~/.config`.
 
 ## Install
