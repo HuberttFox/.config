@@ -29,6 +29,10 @@ iterm2/sockets/
 iterm2/sockets/**
 mole/*.log
 opencode/node_modules/
+opencode/opencode.json.bak
+opencode/.caveman-active
+opencode/.caveman-history.jsonl
+caveman/.caveman-history.jsonl
 fish/
 uv/
 .serena/
@@ -40,6 +44,7 @@ orbstack/vmstate.json
 orbstack/.installid
 raycast/extensions/
 raycast/extensions/node_modules/
+raycast/ai/providers.yaml
 vscode/cli/
 vscode/extensions/
 

@@ -31,8 +31,9 @@ Install a subset:
 - `iterm2` and `alacritty` are installed on macOS via Homebrew casks.
 - `kitty` is installed on macOS via Homebrew cask, and on Linux via kitty's official binary installer, then linked into `~/.local/bin`.
 - `finicky` is installed on macOS via Homebrew cask and provides URL routing for the browser-mode workflow.
-- On macOS, `codex` and `claude-code` are installed via Homebrew casks, and `opencode` via Homebrew formula.
-- On Linux, `codex`, `claude-code`, and `opencode` are installed via Homebrew.
+- Claude Code, Codex, and OpenCode executables are not installed by `install.sh`; install them separately.
+- The Codex component only links the tracked config to `~/.codex/config.toml`.
+- The OpenCode component keeps config under `~/.config/opencode` and runs RTK integration only when both executables already exist.
 - Existing files are backed up to `~/.config/.backup/<timestamp>/`.
 - Private state is not overwritten.
 - If `zsh` is selected and your login shell is not `zsh`, the installer attempts `chsh -s <resolved-zsh-path>` automatically.
@@ -43,17 +44,22 @@ Install a subset:
 
 The following tools can keep shared config in this repo, but are not installed by `install.sh`:
 
+- `codex`
+- `opencode`
 - `raycast`
 - `cursor`
 - `orbstack`
 - `vscode`
 
+Claude Code has no installer component because this repository does not manage shared Claude runtime configuration.
+
 Current sync-only files in this repo:
 
 - `codex/config.toml`
+- `opencode/opencode.json`
 - `cursor/argv.json`
 - `vscode/argv.json`
-- `raycast/ai/providers.yaml`
+- `raycast/ai/providers.yaml` is local-only because it contains provider credentials.
 
 ## Finicky + Raycast (macOS only)
 
