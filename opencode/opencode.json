@@ -1,52 +1,28 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
+    "context7": {
+      "enabled": true,
+      "headers": {
+        "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
+      },
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp"
+    },
     "serena": {
-      "type": "local",
       "command": [
-        "/Users/shiujenyu/.local/bin/serena",
+        "serena",
         "start-mcp-server",
         "--project-from-cwd",
         "--context=ide"
       ],
       "enabled": true,
-      "timeout": 15000
-    },
-    "context7": {
-      "type": "remote",
-      "url": "https://mcp.context7.com/mcp",
-      "enabled": true,
-      "timeout": 15000,
-      "headers": {
-        "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
-      }
+      "type": "local"
     }
   },
-  "model": "cliproxy/gpt-5.3-codex",
-  "provider": {
-    "cliproxy": {
-      "models": {
-        "gpt-5.2": {},
-        "gpt-5.2-codex": {},
-        "gpt-5.3-codex": {},
-        "gpt-5.3-codex-low": {},
-        "gpt-5.3-codex-medium": {},
-        "gpt-5.3-codex-high": {},
-        "gpt-5.3-codex-xhigh": {},
-        "gpt-5.4-mini": {},
-        "gpt-5.4": {},
-        "gpt-5.4-low": {},
-        "gpt-5.4-medium": {},
-        "gpt-5.4-high": {},
-        "gpt-5.4-xhigh": {}
-      },
-      "name": "CliProxy",
-      "npm": "@ai-sdk/openai-compatible",
-      "options": {
-        "apiKey": "{env:CLIPROXY_API_KEY}",
-        "baseURL": "https://cliproxy-api.jenyu.cn/v1"
-      }
-    }
-  },
-  "small_model": "cliproxy/gpt-5.3-codex-spark"
+  "model": "opencode/deepseek-v4-flash-free",
+  "plugin": [
+    "./plugins/caveman/plugin.js"
+  ],
+  "small_model": "opencode/deepseek-v4-flash-free"
 }
