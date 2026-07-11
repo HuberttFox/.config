@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository purpose
 
-This is a personal dotfiles and machine bootstrap repository intended to live at `~/.config`. It manages shell, terminal, editor, AI CLI, tmux, browser routing, and installer configuration for macOS and Linux.
+This is a personal dotfiles and machine bootstrap repository intended to live at `~/.config`. It manages shell, terminal, editor, tmux, browser routing, and installer configuration for macOS and Linux.
 
 ## Common commands
 
@@ -30,9 +30,6 @@ find . -type f -name "*.sh" -exec shellcheck {} +
 
 # Syntax-check all shell scripts when shellcheck is unavailable
 find . -type f -name "*.sh" -exec bash -n {} +
-
-# Install OpenCode plugin dependencies
-npm --prefix opencode install
 ```
 
 There is no traditional build or test suite. Installer changes should be validated with `--dry-run`, preferably scoped to affected components first.
@@ -71,20 +68,15 @@ Respect `DRY_RUN=1` in component logic. In dry-run mode, avoid physical file che
 ## Component patterns
 
 - Shell config (`zsh`, `zim`, `fzf`, `starship`) writes small loader files in `$HOME` that source repo-managed config under `~/.config`.
-- App config components (`codex`, `finicky`, terminal/editor tools) generally symlink repo files into tool-specific locations.
+- App config components (`finicky`, terminal/editor tools) generally symlink repo files into tool-specific locations.
 - `tmux` installs TPM under `~/.tmux/plugins/tpm`, writes `~/.tmux.conf` to source `~/.config/tmux/tmux.conf`, installs TPM plugins, then verifies config by sourcing it in an isolated tmux server.
-- `codex` is sync-only: it links `codex/config.toml` to `~/.codex/config.toml` but does not install the executable.
-- `opencode` is sync-only: shared config lives under `opencode/`, uses OpenCode's free DeepSeek V4 Flash model by default, and runs `rtk init -g --opencode` only when both executables are already available.
-- Claude Code has no installer component; install its executable separately.
-- `rtk` is installed from Homebrew tap `rtk-ai/tap`; rewrite behavior for OpenCode is delegated to the `rtk rewrite` CLI rather than implemented in the TypeScript plugin.
+- `rtk` is installed from Homebrew tap `rtk-ai/tap`.
 
 ## Important configs and state boundaries
 
-Tracked config includes `codex/config.toml`, `opencode/opencode.json`, terminal configs, tmux config/scripts, zsh config, Finicky configs, and Raycast helper scripts.
+Tracked config includes terminal configs, tmux config/scripts, zsh config, Finicky configs, and Raycast helper scripts.
 
-Private or machine-specific state is intentionally ignored in `.gitignore`, including local Git config, zsh local env, Claude local state, Codex auth/history/sessions, OpenCode `node_modules`, Fish/uv/Serena state, Raycast and VS Code extensions, OrbStack state, logs, and `.backup/`.
-
-Sync-only configs listed in `README.md` are kept in this repo but not installed by `install.sh`: Raycast, Cursor, OrbStack, and VS Code.
+The `codex/`, `opencode/`, `cursor/`, `orbstack/`, and `vscode/` directories are entirely local and ignored. Private or machine-specific state is also ignored, including local Git config, zsh local env, Claude local state, Fish/uv/Serena state, Raycast credentials/extensions, logs, and `.backup/`.
 
 ## Existing agent guidance
 
