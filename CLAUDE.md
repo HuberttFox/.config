@@ -2,88 +2,58 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Repository purpose
+## Scope
 
-This is a personal dotfiles and machine bootstrap repository intended to live at `~/.config`. It manages shell, terminal, editor, tmux, browser routing, and installer configuration for macOS and Linux.
+macOS-only dotfiles bootstrap repository intended to live at `~/.config`.
 
-## Common commands
+## Commands
 
 ```bash
-# Preview full bootstrap without modifying files
-./install.sh --all --dry-run
+# Validate installer behavior safely
+./tests/integration.sh
 
-# Apply full bootstrap
-./install.sh --all
+# Syntax-check shell files
+find . -type f -name "*.sh" -exec bash -n {} +
 
-# Preview one or more components
-./install.sh --only zsh --dry-run
-./install.sh --only zsh,tmux,fzf --dry-run
-
-# Skip components from otherwise full selection
-./install.sh --all --skip finicky,kitty --dry-run
-
-# Lint one shell script
-shellcheck scripts/components/zsh.sh
-
-# Lint all shell scripts
+# Lint when ShellCheck is installed
 find . -type f -name "*.sh" -exec shellcheck {} +
 
-# Syntax-check all shell scripts when shellcheck is unavailable
-find . -type f -name "*.sh" -exec bash -n {} +
-```
+# Install all or selected components
+./install.sh --no-shell-switch
+./install.sh --only zsh,tmux,fzf --no-shell-switch
 
-There is no traditional build or test suite. Installer changes should be validated with `--dry-run`, preferably scoped to affected components first.
+# File rollback
+./install.sh --rollback latest
+```
 
 ## Architecture
 
-`install.sh` is the bootstrap orchestrator. It detects platform, parses component selection, filters unsupported components, installs Homebrew packages, runs component `apply`, then runs component `verify`. The supported component list is in `ALL_COMPONENTS` inside `install.sh`.
+`install.sh` rejects non-macOS, resolves retained components, installs Homebrew packages, starts a file transaction, applies components, verifies them, persists Homebrew environment, and optionally switches to Zsh.
 
-Shared installer behavior lives in `scripts/lib/`:
+Shared libraries:
 
-- `common.sh` provides platform detection, logging, failure handling, command resolution, dry-run command execution, backups, safe symlink creation, managed file writes, shell switching helpers, and verification helpers.
-- `brew.sh` locates or installs Homebrew, activates shellenv, manages taps/formulae/casks, and avoids reinstalling already-present Homebrew commands.
+- `scripts/lib/common.sh`: logging, command resolution, transaction-aware file/symlink/profile helpers, shell switching.
+- `scripts/lib/brew.sh`: macOS Homebrew discovery, bootstrap, taps, formulae, casks, shellenv.
+- `scripts/lib/transaction.sh`: run journal, backups, fingerprints, rollback and conflict handling.
 
-Each managed tool is represented by a component script in `scripts/components/<name>.sh`. Components may install packages, synchronize config only, or both. Their subcommand interface is:
+Components implement `formulae`, optional `taps`, `casks`, `apply`, and `verify`. They do not implement platform dispatch; the repository is macOS-only.
 
-- `platforms`: print supported platforms (`darwin`, `linux`, or `all`)
-- `formulae`: print Homebrew formulae to install
-- `taps`: optionally print Homebrew taps
-- `casks`: print macOS Homebrew casks
-- `apply`: link or write repo-managed config
-- `verify`: confirm command/config availability
+## Installer rules
 
-Package collection happens before any component `apply`, so component scripts should expose package needs through `formulae`, `taps`, and `casks` rather than installing packages directly.
+- Every installer-owned home-file mutation must use transaction-aware helpers. Do not write, append, copy, move, symlink, or recursively remove user paths directly.
+- Rollback claims are file-level only. Never imply package, cask, `/etc/shells`, `chsh`, TPM/Zim, Serena, or application-state rollback.
+- Installer changes require `tests/integration.sh`; `--dry-run` is intentionally unsupported.
+- Tests must use temporary `HOME`/state directories and stubs. Never call real Homebrew, network, `sudo`, `chsh`, or application installers.
+- Scripts use `#!/usr/bin/env bash`, `set -euo pipefail`, quoted variables, function-local variables, and `printf` rather than `echo`.
+- Keep tool logic in `scripts/components/<name>.sh`; do not bloat `install.sh`.
 
-## File management conventions
+## Secrets
 
-Use helpers from `scripts/lib/common.sh` for home-directory changes:
+- `.env.example` is tracked and must contain variable names with empty values only.
+- `.env` and generated `raycast/ai/providers.yaml` remain ignored.
+- Zsh loads simple assignments from `.env`; do not add arbitrary shell evaluation.
+- Raycast template/renderer changes require integration tests with dummy keys, missing-value failure, no output leakage, and mode `0600`.
 
-- `write_managed_file "$HOME/.toolrc"` backs up existing files under `.backup/<timestamp>/` before replacing them.
-- `ensure_symlink <target> <link>` backs up conflicting paths before creating symlinks.
-- `require_repo_file <relative-path>` validates repo-managed inputs before applying a component.
-- `ensure_command_available <name>` is the common command verification path.
+## Configuration boundaries
 
-Respect `DRY_RUN=1` in component logic. In dry-run mode, avoid physical file checks that would fail before creation; log what would be verified instead.
-
-## Component patterns
-
-- Shell config (`zsh`, `zim`, `fzf`, `starship`) writes small loader files in `$HOME` that source repo-managed config under `~/.config`.
-- App config components (`finicky`, terminal/editor tools) generally symlink repo files into tool-specific locations.
-- `tmux` installs TPM under `~/.tmux/plugins/tpm`, writes `~/.tmux.conf` to source `~/.config/tmux/tmux.conf`, installs TPM plugins, then verifies config by sourcing it in an isolated tmux server.
-- `rtk` is installed from Homebrew tap `rtk-ai/tap`.
-
-## Important configs and state boundaries
-
-Tracked config includes terminal configs, tmux config/scripts, zsh config, Finicky configs, and Raycast helper scripts.
-
-The `codex/`, `opencode/`, `cursor/`, `orbstack/`, `vscode/`, `iterm2/`, `alacritty/`, `nvim/`, and `neofetch/` directories are entirely local and ignored. Private or machine-specific state is also ignored, including local Git config, zsh local env, Claude local state, Fish/uv/Serena state, Raycast credentials/extensions, logs, and `.backup/`.
-
-## Existing agent guidance
-
-`AGENTS.md` contains stricter repository guidance. Preserve its important constraints when editing installer code:
-
-- Bash scripts use `#!/usr/bin/env bash` and `set -euo pipefail`.
-- Quote variables, use `local` inside functions, and prefer `printf` over `echo`.
-- Keep new tool bootstrap logic in `scripts/components/<name>.sh`; do not bloat `install.sh`.
-- Installer behavior must remain idempotent and safe to run repeatedly.
-- Use paths derived from `ROOT_DIR` or `CONFIG_REPO` rather than hard-coded repo paths.
+Git and tmux use native XDG paths under this repository. Zsh still needs small home-level loader files. Ignored local application configuration, credentials, sessions, extensions, logs, and runtime state are outside installer scope.

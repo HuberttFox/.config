@@ -1,0 +1,16 @@
+id: ModelScope
+name: ModelScope
+base_url: https://api.deepseek.com/v1
+api_keys: __RAYCAST_MODELSCOPE_API_KEY__
+perplexity: __RAYCAST_PERPLEXITY_API_KEY__
+additional_parameters:
+stream: true
+models:
+  id: deepseek-ai/DeepSeek-V3.2
+  name: DeepSeek-V3.2
+  provider: ModelScope
+  description: "DeepSeek-V3.2"
+  context: 128000
+  abilities:
+  tools:
+  supported: true

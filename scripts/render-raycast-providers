@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ENV_FILE="${DOTFILES_ENV_FILE:-$ROOT_DIR/.env}"
+TEMPLATE="$ROOT_DIR/raycast/ai/providers.yaml.example"
+DESTINATION="${RAYCAST_PROVIDERS_FILE:-$ROOT_DIR/raycast/ai/providers.yaml}"
+
+[[ -f "$ENV_FILE" ]] || { printf 'Missing %s\n' "$ENV_FILE" >&2; exit 1; }
+[[ -f "$TEMPLATE" ]] || { printf 'Missing %s\n' "$TEMPLATE" >&2; exit 1; }
+
+load_env_value() {
+  local name="$1" line key value found=0 result=""
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line#export }"
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    [[ "$line" == *=* ]] || { printf 'Invalid .env syntax\n' >&2; exit 1; }
+    key="${line%%=*}"
+    value="${line#*=}"
+    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || { printf 'Invalid .env variable name\n' >&2; exit 1; }
+    if [[ "$key" == "$name" ]]; then
+      ((found += 1))
+      result="$value"
+    fi
+  done < "$ENV_FILE"
+  (( found == 1 )) || { (( found == 0 )) || printf 'Duplicate .env variable: %s\n' "$name" >&2; return 1; }
+  printf '%s' "$result"
+}
+
+MODELSCOPE_KEY="$(load_env_value RAYCAST_MODELSCOPE_API_KEY || true)"
+PERPLEXITY_KEY="$(load_env_value RAYCAST_PERPLEXITY_API_KEY || true)"
+for value in "$MODELSCOPE_KEY" "$PERPLEXITY_KEY"; do
+  [[ -n "$value" ]] || { printf 'Missing required Raycast key in %s\n' "$ENV_FILE" >&2; exit 1; }
+  [[ "$value" =~ ^[A-Za-z0-9._:/+=-]+$ ]] || { printf 'Unsupported key characters\n' >&2; exit 1; }
+done
+
+mkdir -p "$(dirname "$DESTINATION")"
+tmp="$(mktemp "$(dirname "$DESTINATION")/.providers.XXXXXX")"
+trap 'rm -f "$tmp"' EXIT
+python3 - "$TEMPLATE" "$tmp" "$MODELSCOPE_KEY" "$PERPLEXITY_KEY" <<'PY'
+from pathlib import Path
+import sys
+source, destination, model_key, perplexity_key = sys.argv[1:]
+text = Path(source).read_text()
+text = text.replace("__RAYCAST_MODELSCOPE_API_KEY__", model_key)
+text = text.replace("__RAYCAST_PERPLEXITY_API_KEY__", perplexity_key)
+if "__RAYCAST_" in text:
+    raise SystemExit("unresolved provider placeholder")
+Path(destination).write_text(text)
+PY
+chmod 600 "$tmp"
+mv "$tmp" "$DESTINATION"
+trap - EXIT
+printf 'Rendered %s\n' "$DESTINATION"

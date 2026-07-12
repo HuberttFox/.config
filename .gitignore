@@ -4,6 +4,7 @@
 *.zwc
 .zcompdump*
 
+.env
 git/config.local
 zsh/env.local.zsh
 claude/
@@ -13,13 +14,14 @@ cursor/
 opencode/
 orbstack/
 vscode/
-finicky/finicky.custom.js
 Bitwarden CLI/data.json
+finicky/
 iterm2/
 alacritty/
 nvim/
 neofetch/
-mole/*.log
+mole/
+rtk/
 caveman/.caveman-history.jsonl
 fish/
 uv/
@@ -29,24 +31,4 @@ raycast/extensions/node_modules/
 raycast/ai/providers.yaml
 
 .backup/
-dconf/
-ibus/
-pulse/
-monitors.xml
-monitors.xml~
-user-dirs.dirs
-user-dirs.locale
-GNOME-xdg-terminals.list
-ubuntu-xdg-terminals.list
-xdg-terminals.list
-gnome-initial-setup-done
-gnome-session/
-goa-1.0/
-gtk-3.0/bookmarks
-tiling-assistant/
-update-notifier/
-.gsd-keyboard.settings-ported
-evolution/
 rustdesk/*.toml
-nautilus/
-systemd/

@@ -6,7 +6,6 @@ source "$ROOT_DIR/scripts/lib/common.sh"
 initialize_common_state
 
 case "${1:-}" in
-  platforms) printf 'darwin\nlinux\n' ;;
   formulae) printf 'yazi\n' ;;
   casks) ;;
   apply) : ;;
