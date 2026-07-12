@@ -1,0 +1,4 @@
+[core]
+	excludesfile = ~/.config/git/ignore
+[include]
+	path = ~/.config/git/config.local

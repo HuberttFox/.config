@@ -8,64 +8,55 @@ initialize_common_state
 apply_component() {
   local tpm_dir="$HOME/.tmux/plugins/tpm"
   local tpm_install="$tpm_dir/bin/install_plugins"
-
+  local legacy='source-file ~/.config/tmux/tmux.conf'
   require_repo_file "tmux/tmux.conf"
+
   if [[ ! -d "$tpm_dir" ]]; then
-    if [[ "$DRY_RUN" == "1" ]]; then
-      log "Would install tmux plugin manager to $tpm_dir"
+    local seq
+    command_path git >/dev/null 2>&1 || die "git not found"
+    seq="$(transaction_prepare "$tpm_dir" "$CURRENT_COMPONENT")"
+    mkdir -p "$(dirname "$tpm_dir")"
+    if git clone https://github.com/tmux-plugins/tpm "$tpm_dir"; then
+      transaction_applied "$seq" "$tpm_dir"
     else
-      command_path git >/dev/null 2>&1 || die "git not found"
-      ensure_dir "$(dirname "$tpm_dir")"
-      git clone https://github.com/tmux-plugins/tpm "$tpm_dir"
+      rm -rf "$tpm_dir"
+      return 1
     fi
   else
     log "tmux plugin manager already installed"
   fi
 
-  write_managed_file "$HOME/.tmux.conf" <<'MANAGED'
-source-file ~/.config/tmux/tmux.conf
-MANAGED
-
-  if [[ "$DRY_RUN" == "1" ]]; then
-    log "Would install tmux plugins via TPM"
-  else
-    [[ -x "$tpm_install" ]] || die "Missing $tpm_install"
-    "$tpm_install" >/dev/null
+  if [[ -f "$HOME/.tmux.conf" && ! -L "$HOME/.tmux.conf" ]]; then
+    if [[ "$(cat "$HOME/.tmux.conf")" == "$legacy" ]]; then
+      local seq
+      seq="$(transaction_prepare "$HOME/.tmux.conf" "$CURRENT_COMPONENT")"
+      rm -f "$HOME/.tmux.conf"
+      transaction_applied "$seq" "$HOME/.tmux.conf"
+      log "Removed legacy tmux loader: $HOME/.tmux.conf"
+    else
+      warn "Preserving user-managed file: $HOME/.tmux.conf; it may override XDG config"
+    fi
   fi
+
+  [[ -x "$tpm_install" ]] || die "Missing $tpm_install"
+  "$tpm_install" >/dev/null
 }
 
 verify_component() {
   local tmux_output=""
   local tmux_bin=""
   local socket_name="dotfiles-verify-$$"
-
-  if [[ "$DRY_RUN" == "1" && ! -x "$HOME/.tmux/plugins/tpm/tpm" ]]; then
-    log "Would verify ~/.tmux/plugins/tpm/tpm after install"
-  else
-    [[ -x "$HOME/.tmux/plugins/tpm/tpm" ]] || die "Missing ~/.tmux/plugins/tpm/tpm"
-  fi
-
-  if [[ "$DRY_RUN" == "1" && ! -f "$HOME/.tmux.conf" ]]; then
-    log "Would verify ~/.tmux.conf after creation"
-    return 0
-  fi
-  [[ -f "$HOME/.tmux.conf" ]] || die "Missing ~/.tmux.conf"
-  tmux_bin="$(command_path tmux 2>/dev/null)" || return 0
-  if [[ "$DRY_RUN" == "1" ]]; then
-    log "Would verify tmux by sourcing ~/.tmux.conf"
-  else
-    "$tmux_bin" -L "$socket_name" -f /dev/null new-session -d -s dotfiles-verify >/dev/null 2>&1 || \
-      die "tmux failed to start an isolated verification server"
-    if ! tmux_output="$("$tmux_bin" -L "$socket_name" source-file "$HOME/.tmux.conf" 2>&1)"; then
-      "$tmux_bin" -L "$socket_name" kill-server >/dev/null 2>&1 || true
-      die "tmux failed to source ~/.tmux.conf: $tmux_output"
-    fi
+  [[ -x "$HOME/.tmux/plugins/tpm/tpm" ]] || die "Missing ~/.tmux/plugins/tpm/tpm"
+  tmux_bin="$(command_path tmux 2>/dev/null)" || die "tmux not found"
+  "$tmux_bin" -L "$socket_name" -f /dev/null new-session -d -s dotfiles-verify >/dev/null 2>&1 || die "tmux failed to start verification server"
+  if ! tmux_output="$("$tmux_bin" -L "$socket_name" source-file "$CONFIG_REPO/tmux/tmux.conf" 2>&1)"; then
     "$tmux_bin" -L "$socket_name" kill-server >/dev/null 2>&1 || true
+    die "tmux failed to source config: $tmux_output"
   fi
+  "$tmux_bin" -L "$socket_name" kill-server >/dev/null 2>&1 || true
 }
 
 case "${1:-}" in
-  platforms) printf 'darwin\nlinux\n' ;;
   formulae) printf 'tmux\n' ;;
   taps) ;;
   casks) ;;

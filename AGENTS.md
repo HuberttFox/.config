@@ -1,108 +1,59 @@
 # Agent Guidelines for dotfiles repository
 
-This repository manages personal dotfiles, configurations, and machine bootstrapping scripts, designed to reside at `~/.config`. As an agent modifying this codebase, you must adhere strictly to these guidelines to ensure the safety, idempotency, and reliability of the user's local environment.
+This repository is a macOS-only bootstrap system intended to live at `~/.config`.
 
-## 1. Build, Lint, and Test Commands
+## Validation
 
-Because this is a dotfiles repository, there is no traditional compilation step or test suite. Validation is performed through static analysis (linting) and idempotency checks via dry-run executions.
-
-### Linting
-All shell scripts must pass `shellcheck` without warnings or errors.
-Run this command to lint a specific script before proposing changes:
-```bash
-shellcheck path/to/script.sh
-```
-To check all scripts in the repository:
-```bash
-find . -type f -name "*.sh" -exec shellcheck {} +
-```
-
-### Testing & Validation
-Testing relies on the idempotency of the installer and its built-in preview mechanism. You MUST test installer modifications using the dry-run flag before assuming success.
-
-**To safely test changes to the installer or components:**
-Run the installer in dry-run mode. This verifies script logic, variable resolution, and component parsing without modifying the file system or executing package managers.
-```bash
-./install.sh --all --dry-run
-```
-
-**To test a single component (e.g., if you modified `zsh` setup):**
-```bash
-./install.sh --only zsh --dry-run
-```
-
-When modifying a specific component in `scripts/components/<name>.sh`, ensure the `verify` block correctly detects both healthy and broken states.
-
----
-
-## 2. Code Style & Architecture Guidelines
-
-### Bash Scripting (Primary Language)
-The installer and all modules are written in Bash. Conform to these strict standards:
-
-- **Shebang & Strict Mode**: Every script must start with:
-  ```bash
-  #!/usr/bin/env bash
-  set -euo pipefail
-  ```
-- **Variables**:
-  - Always quote variables to prevent word splitting and globbing: `"$VAR"` not `$VAR`.
-  - Use `local` for all variables declared inside functions.
-  - Prefix global/environment variables with uppercase letters (e.g., `CONFIG_REPO`, `DRY_RUN`).
-- **Output**: Use `printf` instead of `echo` for consistency and predictable escaping.
-  - Correct: `printf '%s\n' "Message"`
-  - Incorrect: `echo "Message"`
-- **Includes**: When sourcing library files, include a shellcheck directive to suppress warnings:
-  ```bash
-  # shellcheck source=scripts/lib/common.sh
-  source "$ROOT_DIR/scripts/lib/common.sh"
-  ```
-- **Error Handling**: Use the provided `die` function (from `common.sh`) for fatal errors.
-  ```bash
-  [[ -f "$file" ]] || die "Critical file missing: $file"
-  ```
-
-### Component Architecture
-The bootstrapping process is modular. If asked to add a new tool, create a new script under `scripts/components/`. Do not bloat the main `install.sh`.
-
-A valid component script MUST implement a specific `case` structure handling these subcommands:
-1.  `platforms`: Print supported OS types (`darwin`, `linux`, `all`).
-2.  `formulae`: Print Homebrew formula names to install (one per line).
-3.  `casks`: Print Homebrew cask names to install (one per line).
-4.  `apply`: Execute logic to link files or generate configurations. 
-5.  `verify`: Check if the installation was successful. MUST respect `$DRY_RUN == 1` to skip physical file checks during previews.
-
-*Reference Implementation (e.g., `scripts/components/lazygit.sh`):*
-```bash
-case "${1:-}" in
-  platforms) printf 'darwin\nlinux\n' ;;
-  formulae) printf 'package-name\n' ;;
-  casks) ;;
-  apply) apply_component ;;
-  verify) verify_component ;;
-  *) die "Unknown subcommand: ${1:-}" ;;
-esac
-```
-
-### Safe File Modifications
-Never use raw `cp` or `echo >` to generate configuration files in the user's `$HOME` directory. 
-Always use the provided `write_managed_file` helper from `common.sh`. This ensures files are safely backed up before being overwritten, maintaining the `.backup/` history.
+There is no traditional build. Installer changes must pass:
 
 ```bash
-write_managed_file "$HOME/.toolrc" <<'MANAGED'
-# Config goes here
-MANAGED
+./tests/integration.sh
+find . -type f -name "*.sh" -exec bash -n {} +
+find . -type f -name "*.sh" -exec shellcheck {} +  # when available
 ```
 
-### Python Scripts
-Python scripts (e.g., `tmux/scripts/session_manager.py`) must follow modern Python 3 conventions:
-- Use type hints (`from typing import List, Dict`, etc.).
-- Prefer `subprocess.run` over older methods (`os.system`, `subprocess.Popen`) for shell executions.
-- Use strict typing and handle edge cases for external command outputs.
+The integration suite uses temporary `HOME` and installer state with command stubs. Tests must never invoke real Homebrew, network downloads, `sudo`, `chsh`, or application installers.
 
-### Operational Safety & Mandates
-1. **Idempotency**: All `apply` scripts must be safe to run multiple times. They should check if a configuration already exists and gracefully update or skip it.
-2. **Path Resolution**: Always use absolute paths derived from `$ROOT_DIR` or `$CONFIG_REPO`.
-3. **Privacy**: Do not commit secrets, API keys, or machine-specific paths to shared config files.
-4. **Gitignore**: If a tool requires private state, runtime auth files, or extensions, ensure the relevant directories are added to `.gitignore`.
-5. **Remote Operations**: Never store fixed credentials in this repository. Use environment-managed secrets or local-only secure notes outside Git.
+## Bash style
+
+- Start scripts with `#!/usr/bin/env bash` and `set -euo pipefail`.
+- Quote variable expansions.
+- Use `local` inside functions.
+- Prefer `printf` over `echo`.
+- Source shared libraries from paths derived from `ROOT_DIR` or `CONFIG_REPO`.
+- Use `die` for fatal errors.
+
+## Component architecture
+
+New retained tools belong in `scripts/components/<name>.sh`. Components implement:
+
+1. `formulae`
+2. optional `taps`
+3. `casks`
+4. `apply`
+5. `verify`
+
+Do not add platform subcommands or Linux branches. Package needs must be declared before `apply`, not installed ad hoc inside components unless the tool cannot be managed through Homebrew and the behavior is explicitly tested.
+
+## File safety and rollback
+
+Every installer-owned mutation of user files, symlinks, or profile lines must use transaction-aware helpers from `scripts/lib/common.sh` and `scripts/lib/transaction.sh`.
+
+- Journal before mutation.
+- Preserve the original pre-run state once per destination.
+- Replace files atomically.
+- Do not recursively remove unknown user paths.
+- Preserve and warn on unknown legacy loader content.
+- Rollback is conflict-safe and file-level only; it does not cover packages, `/etc/shells`, `chsh`, third-party downloads, or application state.
+
+## Secrets
+
+- Never put secret values in tracked files.
+- `.env.example` contains empty placeholders only.
+- `.env` and generated `raycast/ai/providers.yaml` remain ignored.
+- Environment loaders must parse assignments, not evaluate arbitrary shell code.
+- Secret renderer tests use dummy values and assert no output leakage plus `0600` permissions.
+
+## Scope
+
+Ignored application configuration and runtime state are local-only. Keep repository configuration limited to files consumed by retained components or native macOS application paths.

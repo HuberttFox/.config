@@ -2,118 +2,104 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-This repository is intended to live at `~/.config`. Its installer bootstraps selected packages and repository-managed configuration on macOS and Linux.
-
-## Prerequisites
-
-- Run the installer as a normal, non-root user.
-- Network access is required for Homebrew and components that download external resources.
-- Keep the repository at `~/.config`. Another location only triggers a warning, but generated loaders reference `~/.config` and therefore rely on this path.
-
-## Usage
-
-```bash
-# Install every component supported on this platform
-./install.sh
-
-# Equivalent explicit form
-./install.sh --all
-
-# Detect current state and preview actions without applying them
-./install.sh --dry-run
-
-# Select or exclude components
-./install.sh --only zsh,tmux,fzf
-./install.sh --skip finicky,kitty
-```
-
-| Option | Behavior |
-|---|---|
-| no option / `--all` | Select every registered component, then skip unsupported platforms |
-| `--only a,b` | Select only the comma-separated components |
-| `--skip a,b` | Remove components from the current selection |
-| `--dry-run` | Inspect current state and print intended actions without installing packages or replacing managed destinations |
-| `--force` | Force supported reinstall paths; currently mainly affects Kitty on Linux |
-
-## What the installer does
-
-1. Detects macOS or Linux and refuses to run as root.
-2. Resolves component selection; no `--only` means all registered components.
-3. Warns and skips components unsupported on the current platform.
-4. Collects and deduplicates Homebrew taps, formulae, and casks.
-5. Installs Homebrew when missing, activates its environment, then installs missing packages.
-6. Runs every selected component's `apply` action.
-7. Runs every selected component's `verify` action and stops on verification failure.
-8. If `zsh` is selected, registers its executable in `/etc/shells` when needed and attempts to change the login shell.
-9. Persists `brew shellenv` in `~/.zprofile` and the profile for the detected login shell.
-10. After an interactive run started outside Zsh, replaces the current process with a login Zsh session.
+macOS-only bootstrap repository intended to live at `~/.config`.
 
 ## Components
 
-### Configuration and additional setup
+The installer manages:
 
-| Component | Platforms | Installer behavior |
-|---|---|---|
-| `git` | macOS, Linux | Installs Git and writes `~/.gitconfig` to include `git/config.shared` and optional local `git/config.local` |
-| `zsh` | macOS, Linux | Installs Zsh and writes `~/.zshenv` and `~/.zshrc` loaders for repository configuration |
-| `zim` | macOS, Linux | Links `~/.zimrc`, downloads `zimfw.zsh`, and generates `~/.zim/init.zsh` |
-| `fzf` | macOS, Linux | Installs FZF and links `~/.fzf.zsh` to the repository loader |
-| `tmux` | macOS, Linux | Installs tmux, clones TPM, writes the `~/.tmux.conf` loader, installs plugins, and verifies config in an isolated tmux server |
-| `kitty` | macOS, Linux | Uses a Homebrew cask on macOS; on Linux runs Kitty's official installer and links `kitty` and `kitten` into `~/.local/bin` |
-| `finicky` | macOS | Installs the app and links `finicky/finicky.dia.js` to `~/.finicky.js` |
-| `serena` | macOS, Linux | Installs `serena-agent` through `uv tool` when absent and runs `serena init` when needed |
+- Shell: `git`, `zsh`, `zim`, `fzf`, `starship`, `tmux`
+- Development CLI: `lazygit`, `vim`, `yazi`
 
-### Package-oriented components
+Removed components are no longer installed or configured, but existing applications are not uninstalled.
 
-| Components | Platforms | Installer behavior |
-|---|---|---|
-| `starship`, `tldr`, `fastfetch`, `lazygit`, `vim`, `yazi`, `rtk`, `beads`, `uv` | macOS, Linux | Install through Homebrew and verify command availability |
-| `mole` | macOS | Installs through Homebrew and verifies the command |
-| `ccswitch` | macOS | Adds its Homebrew tap, installs the cask, and verifies the app or `cc-switch` command |
+## Secrets
 
-`rtk` uses the `rtk-ai/tap` tap. `ccswitch` uses `farion1231/ccswitch`. Platform-incompatible components are skipped with a warning.
+Tracked `.env.example` defines required variable names without values:
+
+```bash
+cp .env.example .env
+chmod 600 .env
+```
+
+Fill local values in `.env`:
+
+```dotenv
+CONTEXT7_API_KEY=
+RAYCAST_MODELSCOPE_API_KEY=
+RAYCAST_PERPLEXITY_API_KEY=
+```
+
+Zsh loads simple `NAME=VALUE` assignments from `.env`. The file is ignored and values are never committed. Move assignments from legacy `zsh/env.local.zsh` manually; that file is no longer sourced.
+
+Raycast does not interpolate `.env` itself. Generate its ignored provider file explicitly:
+
+```bash
+./scripts/render-raycast-providers
+```
+
+The renderer validates required values, writes atomically, applies mode `0600`, and never prints secrets.
+
+## Install
+
+```bash
+# All retained components
+./install.sh
+
+# Selected components
+./install.sh --only zsh,tmux,fzf
+
+# Exclude components
+./install.sh --skip tmux,yazi
+
+# Install without changing login shell or starting a new Zsh
+./install.sh --no-shell-switch
+```
+
+The installer:
+
+1. Rejects non-macOS and root execution.
+2. Collects Homebrew taps, formulae, and casks.
+3. Installs missing packages.
+4. Applies selected configuration.
+5. Verifies every selected component.
+6. Records installer-owned file changes in a transaction.
+7. Optionally registers Zsh, runs `chsh`, persists `brew shellenv`, and starts login Zsh.
+
+Git and tmux use native XDG paths (`~/.config/git/config` and `~/.config/tmux/tmux.conf`). Legacy `~/.gitconfig` and `~/.tmux.conf` loaders are removed only when they exactly match old installer-generated content; unknown files are preserved with a warning.
+
+## Safe validation
+
+`--dry-run` was removed because it skipped the operations most likely to fail. Use the sandbox integration suite instead:
+
+```bash
+tests/integration.sh
+```
+
+It runs real installer `apply` and `verify` paths under temporary `HOME` and state directories with stubbed Homebrew, network, tmux, Serena, `sudo`, and `chsh`. Temporary data is deleted afterward.
+
+## File rollback
+
+Every install receives a run ID. File rollback commands:
+
+```bash
+./install.sh --rollback latest
+./install.sh --rollback <run-id>
+./install.sh --rollback all
+./install.sh --rollback-force <latest|run-id|all>
+```
+
+Normal rollback restores replaced paths and removes paths created by the selected run, newest changes first. If a managed path changed after installation, rollback stops and preserves it. Forced rollback first stores the conflicting current version under the run's `rollback-conflicts/` directory.
+
+Rollback covers only files and symlinks changed through installer transaction helpers. It does **not** reverse Homebrew packages/taps/casks, `/etc/shells`, `chsh`, TPM or Zim downloads, or application preferences.
+
+Transaction data lives under `${XDG_STATE_HOME:-~/.local/state}/dotfiles-installer`. If installation fails, the error prints the run ID and exact rollback command.
 
 ## Important details
 
-### Existing paths and backups
-
-- Before replacing a conflicting managed path, the installer copies it to `~/.config/.backup/<timestamp>/`.
-- After backup, the conflicting destination is removed recursively and replaced. This also applies when the destination is a directory.
-- Correct symlinks and managed files whose contents already match are left unchanged.
-- Backups are local and ignored by Git; they are not an off-machine backup.
-
-### Network and privileges
-
-- Homebrew may be downloaded and installed automatically.
-- Zim, TPM, Kitty on Linux, and Serena may contact external services during setup.
-- Selecting `zsh` may run `chsh`.
-- If the selected Zsh path is absent from `/etc/shells`, an interactive run may invoke `sudo` to register it. Noninteractive runs skip this step with a warning.
-
-### Shell changes
-
-- Homebrew environment initialization is appended to `~/.zprofile` and to the profile associated with the detected login shell.
-- After a successful interactive run started outside Zsh, the installer executes `zsh -l`. Because it uses `exec`, control does not return to the original shell process.
-
-### Dry-run and scope
-
-- `--dry-run` still detects the platform, shell, commands, packages, and existing files, so output varies with machine state.
-- It does not install packages or replace managed destinations. Verification reports checks that would happen after installation when an expected artifact does not exist yet.
-- Ignored application configuration, credentials, extensions, sessions, logs, and other machine-specific runtime state are outside installer scope and remain untouched. See `.gitignore` for the authoritative list.
-
-## Verify before applying
-
-```bash
-# Show accepted flags
-./install.sh --help
-
-# Preview the complete platform-supported selection
-./install.sh --all --dry-run
-
-# Preview a focused configuration run
-./install.sh --only zsh,tmux,fzf --dry-run
-
-# Preview all components except selected entries
-./install.sh --all --skip finicky,kitty --dry-run
-```
-
-Review the dry-run output, especially backup, shell-switch, package-install, and network actions, before running without `--dry-run`.
+- Installer-managed replacements are journaled and backed up before mutation.
+- Package installation and external setup still require network access.
+- Without `--no-shell-switch`, selecting Zsh may invoke `sudo`, modify `/etc/shells`, run `chsh`, and replace the current shell process with `zsh -l`.
+- Homebrew environment lines are written transactionally to login profiles.
+- Ignored local application configuration, credentials, sessions, logs, and runtime state remain outside installer scope.
+- Old Finicky files/applications and packages removed from the component list are not deleted automatically.

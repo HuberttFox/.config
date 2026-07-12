@@ -23,21 +23,11 @@ MANAGED
 }
 
 verify_component() {
-  if [[ "$DRY_RUN" == "1" && ! -f "$HOME/.zshenv" ]]; then
-    log "Would verify ~/.zshenv after creation"
-  else
-    [[ -f "$HOME/.zshenv" ]] || die "Missing ~/.zshenv"
-  fi
-
-  if [[ "$DRY_RUN" == "1" && ! -f "$HOME/.zshrc" ]]; then
-    log "Would verify ~/.zshrc after creation"
-    return 0
-  fi
+  [[ -f "$HOME/.zshenv" ]] || die "Missing ~/.zshenv"
   [[ -f "$HOME/.zshrc" ]] || die "Missing ~/.zshrc"
 }
 
 case "${1:-}" in
-  platforms) printf 'darwin\nlinux\n' ;;
   formulae) printf 'zsh\n' ;;
   casks) ;;
   apply) apply_component ;;

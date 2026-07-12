@@ -6,32 +6,29 @@ source "$ROOT_DIR/scripts/lib/common.sh"
 initialize_common_state
 
 apply_component() {
-  require_repo_file "git/config.shared"
-  if [[ -f "$CONFIG_REPO/git/config.local" ]]; then
-    write_managed_file "$HOME/.gitconfig" <<'MANAGED'
-[include]
-	path = ~/.config/git/config.shared
-[include]
-	path = ~/.config/git/config.local
-MANAGED
-  else
-    write_managed_file "$HOME/.gitconfig" <<'MANAGED'
-[include]
-	path = ~/.config/git/config.shared
-MANAGED
+  local content=""
+  require_repo_file "git/config"
+  if [[ -f "$HOME/.gitconfig" && ! -L "$HOME/.gitconfig" ]]; then
+    content="$(cat "$HOME/.gitconfig")"
+    case "$content" in
+      $'[include]\n\tpath = ~/.config/git/config.shared'|$'[include]\n\tpath = ~/.config/git/config.shared\n[include]\n\tpath = ~/.config/git/config.local')
+        local seq
+        seq="$(transaction_prepare "$HOME/.gitconfig" "$CURRENT_COMPONENT")"
+        rm -f "$HOME/.gitconfig"
+        transaction_applied "$seq" "$HOME/.gitconfig"
+        log "Removed legacy Git loader: $HOME/.gitconfig"
+        ;;
+      *) warn "Preserving user-managed file: $HOME/.gitconfig" ;;
+    esac
   fi
 }
 
 verify_component() {
-  if [[ "$DRY_RUN" == "1" && ! -f "$HOME/.gitconfig" ]]; then
-    log "Would verify ~/.gitconfig after creation"
-    return 0
-  fi
-  [[ -f "$HOME/.gitconfig" ]] || die "Missing ~/.gitconfig"
+  require_repo_file "git/config"
+  ensure_command_available git
 }
 
 case "${1:-}" in
-  platforms) printf 'darwin\nlinux\n' ;;
   formulae) printf 'git\n' ;;
   taps) ;;
   casks) ;;

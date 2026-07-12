@@ -12,7 +12,7 @@ find_brew_bin() {
     command -v brew
     return 0
   fi
-  for candidate in /opt/homebrew/bin/brew /home/linuxbrew/.linuxbrew/bin/brew /usr/local/bin/brew; do
+  for candidate in /opt/homebrew/bin/brew /usr/local/bin/brew; do
     if [[ -x "$candidate" ]]; then
       printf '%s\n' "$candidate"
       return 0
@@ -24,17 +24,6 @@ find_brew_bin() {
 ensure_brew() {
   if BREW_BIN="$(find_brew_bin 2>/dev/null)"; then
     export BREW_BIN
-    return 0
-  fi
-
-  if [[ "$DRY_RUN" == "1" ]]; then
-    case "$PLATFORM" in
-      darwin) BREW_BIN="/opt/homebrew/bin/brew" ;;
-      linux) BREW_BIN="/home/linuxbrew/.linuxbrew/bin/brew" ;;
-      *) die "Unsupported platform for Homebrew bootstrap: $PLATFORM" ;;
-    esac
-    export BREW_BIN
-    log "Would install Homebrew"
     return 0
   fi
 
@@ -51,12 +40,6 @@ ensure_brew() {
 activate_brew_shellenv() {
   [[ -n "$BREW_BIN" ]] || BREW_BIN="$(find_brew_bin)"
   export BREW_BIN
-
-  if [[ "$DRY_RUN" == "1" ]]; then
-    log "Would eval Homebrew shellenv from $BREW_BIN"
-    return 0
-  fi
-
   eval "$("$BREW_BIN" shellenv)"
 }
 
@@ -152,10 +135,6 @@ brew_install_taps() {
 
 brew_install_casks() {
   local cask
-  if [[ "$PLATFORM" != "darwin" ]]; then
-    warn "Skipping cask installation on non-macOS platform: $*"
-    return 0
-  fi
   for cask in "$@"; do
     [[ -n "$cask" ]] || continue
     if brew_cask_installed "$cask"; then

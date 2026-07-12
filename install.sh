@@ -8,18 +8,26 @@ export CONFIG_REPO="$ROOT_DIR"
 source "$ROOT_DIR/scripts/lib/common.sh"
 # shellcheck source=scripts/lib/brew.sh
 source "$ROOT_DIR/scripts/lib/brew.sh"
+# shellcheck source=scripts/lib/transaction.sh
+source "$ROOT_DIR/scripts/lib/transaction.sh"
 
-ALL_COMPONENTS=(git zsh zim fzf starship tmux tldr fastfetch lazygit vim yazi kitty finicky rtk beads uv serena mole ccswitch)
+ALL_COMPONENTS=(git zsh zim fzf starship tmux lazygit vim yazi)
 SELECTED_COMPONENTS=()
 SKIP_COMPONENTS=()
-DRY_RUN=0
-FORCE=0
-PLATFORM="$(detect_platform)"
+NO_SHELL_SWITCH=0
+ROLLBACK_SELECTOR=""
+ROLLBACK_FORCE=0
 
 usage() {
   cat <<'USAGE'
-Usage: ./install.sh [--all] [--only a,b,c] [--skip a,b,c] [--dry-run] [--force]
+Usage: ./install.sh [--all] [--only a,b,c] [--skip a,b,c] [--no-shell-switch]
+       ./install.sh --rollback <latest|run-id|all>
+       ./install.sh --rollback-force <latest|run-id|all>
 USAGE
+}
+
+require_macos() {
+  [[ "$(uname -s)" == "Darwin" ]] || die "This installer supports macOS only."
 }
 
 require_non_root_user() {
@@ -44,20 +52,9 @@ component_script() {
   printf '%s/scripts/components/%s.sh\n' "$ROOT_DIR" "$name"
 }
 
-component_supported() {
-  local name="$1"
-  local script="$2"
-  local item
-  for item in $("$script" platforms); do
-    if [[ "$item" == "all" || "$item" == "$PLATFORM" ]]; then
-      return 0
-    fi
-  done
-  return 1
-}
-
 collect_selected_components() {
   local name
+  local script
   local filtered=()
 
   if [[ ${#SELECTED_COMPONENTS[@]} -eq 0 ]]; then
@@ -69,25 +66,11 @@ collect_selected_components() {
     if [[ ${#SKIP_COMPONENTS[@]} -gt 0 ]] && contains_word "$name" "${SKIP_COMPONENTS[@]}"; then
       continue
     fi
+    script="$(component_script "$name")"
+    [[ -x "$script" ]] || die "Missing component script: $script"
     filtered+=("$name")
   done
 
-  SELECTED_COMPONENTS=("${filtered[@]}")
-}
-
-filter_supported_components() {
-  local name
-  local script
-  local filtered=()
-  for name in "${SELECTED_COMPONENTS[@]}"; do
-    script="$(component_script "$name")"
-    [[ -x "$script" ]] || die "Missing component script: $script"
-    if component_supported "$name" "$script"; then
-      filtered+=("$name")
-    else
-      warn "Skipping unsupported component on $PLATFORM: $name"
-    fi
-  done
   SELECTED_COMPONENTS=("${filtered[@]}")
 }
 
@@ -144,7 +127,7 @@ apply_components() {
   for name in "${SELECTED_COMPONENTS[@]}"; do
     script="$(component_script "$name")"
     log "Applying component: $name"
-    "$script" apply
+    CURRENT_COMPONENT="$name" "$script" apply
   done
 }
 
@@ -164,23 +147,30 @@ while [[ $# -gt 0 ]]; do
       ;;
     --only)
       shift
-      [[ $# -gt 0 ]] || die "--only requires a value"
+      [[ $# -gt 0 && -n "$(trim "$1")" ]] || die "--only requires a non-empty value"
       while IFS= read -r item; do
         SELECTED_COMPONENTS+=("$item")
       done < <(parse_csv_into_array "$1")
       ;;
     --skip)
       shift
-      [[ $# -gt 0 ]] || die "--skip requires a value"
+      [[ $# -gt 0 && -n "$(trim "$1")" ]] || die "--skip requires a non-empty value"
       while IFS= read -r item; do
         SKIP_COMPONENTS+=("$item")
       done < <(parse_csv_into_array "$1")
       ;;
-    --dry-run)
-      DRY_RUN=1
+    --no-shell-switch)
+      NO_SHELL_SWITCH=1
       ;;
-    --force)
-      FORCE=1
+    --rollback|--rollback-force)
+      [[ -z "$ROLLBACK_SELECTOR" ]] || die "Rollback option specified more than once"
+      [[ "$1" == "--rollback-force" ]] && ROLLBACK_FORCE=1
+      shift
+      [[ $# -gt 0 ]] || die "Rollback requires latest, all, or a run ID"
+      ROLLBACK_SELECTOR="$1"
+      ;;
+    --dry-run)
+      die "--dry-run is no longer supported. Use tests/integration.sh for safe installer validation."
       ;;
     -h|--help)
       usage
@@ -193,30 +183,38 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-export DRY_RUN FORCE PLATFORM
+require_macos
 initialize_common_state
+
+if [[ -n "$ROLLBACK_SELECTOR" ]]; then
+  [[ ${#SELECTED_COMPONENTS[@]} -eq 0 && ${#SKIP_COMPONENTS[@]} -eq 0 ]] || die "Rollback cannot be combined with component selection"
+  transaction_rollback "$ROLLBACK_SELECTOR" "$ROLLBACK_FORCE"
+  exit $?
+fi
 
 [[ "$(basename "$ROOT_DIR")" == ".config" ]] || warn "Expected repo root to be named .config, got: $ROOT_DIR"
 require_non_root_user
 collect_selected_components
-filter_supported_components
 
-log "Platform: $PLATFORM"
 if contains_word "zsh" "${SELECTED_COMPONENTS[@]}"; then
   print_shell_detection_context
 fi
 log "Selected components: ${SELECTED_COMPONENTS[*]}"
+transaction_start "$(IFS=,; printf '%s' "${SELECTED_COMPONENTS[*]}")"
+trap 'transaction_fail $?' ERR INT TERM
 install_packages
 apply_components
 verify_components
-if contains_word "zsh" "${SELECTED_COMPONENTS[@]}"; then
+if [[ "$NO_SHELL_SWITCH" != "1" ]] && contains_word "zsh" "${SELECTED_COMPONENTS[@]}"; then
   auto_switch_login_shell_to_zsh
 fi
 if find_brew_bin >/dev/null 2>&1; then
   activate_brew_shellenv
-  ensure_brew_shellenv_for_shells
+  CURRENT_COMPONENT=brew-shellenv ensure_brew_shellenv_for_shells
 fi
-log "Install completed"
-if contains_word "zsh" "${SELECTED_COMPONENTS[@]}"; then
+transaction_set_status completed
+trap - ERR INT TERM
+log "Install completed (run: $TRANSACTION_RUN_ID)"
+if [[ "$NO_SHELL_SWITCH" != "1" ]] && contains_word "zsh" "${SELECTED_COMPONENTS[@]}"; then
   start_interactive_zsh_session
 fi
