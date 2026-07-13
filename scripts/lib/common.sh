@@ -22,6 +22,10 @@ initialize_common_state() {
 }
 
 log() { printf '[INFO] %s\n' "$*"; }
+debug() {
+  [[ "${INSTALLER_DEBUG:-0}" == "1" ]] || return 0
+  printf '[DEBUG] %s\n' "$*" >&2
+}
 warn() { printf '[WARN] %s\n' "$*" >&2; }
 die() { printf '[ERROR] %s\n' "$*" >&2; exit 1; }
 
@@ -43,7 +47,15 @@ append_unique() {
   eval "${array_name}+=(\"$value\")"
 }
 
-run_cmd() { "$@"; }
+run_cmd() {
+  local arg
+  if [[ "${INSTALLER_DEBUG:-0}" == "1" ]]; then
+    printf '[DEBUG] Running:' >&2
+    for arg in "$@"; do printf ' %q' "$arg" >&2; done
+    printf '\n' >&2
+  fi
+  "$@"
+}
 
 ensure_dir() {
   local path="$1"
