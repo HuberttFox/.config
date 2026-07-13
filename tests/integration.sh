@@ -60,7 +60,7 @@ EOF
     if [[ "${1:-}" == -c ]]; then
       mkdir -p "$HOME/.zim"; printf '# init\n' > "$HOME/.zim/init.zsh"
     fi ;;
-  ps) printf '%s\n' "${CURRENT_SHELL_PATH:-/bin/zsh}" ;;
+  ps) printf '%s\n' "${STUB_CURRENT_SHELL:-/bin/zsh}" ;;
   dscl) printf 'UserShell: /bin/zsh\n' ;;
   sudo|chsh) fail=1; printf 'unsafe command invoked: %s\n' "$name" >&2; exit 99 ;;
   tmux) exit 0 ;;
@@ -74,7 +74,7 @@ done
 export PATH="$TMP_ROOT/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 run_installer() { "$ROOT_DIR/install.sh" --no-shell-switch "$@"; }
-run_zsh_installer() { CURRENT_SHELL_PATH=/bin/zsh "$ROOT_DIR/install.sh" --no-shell-switch "$@"; }
+run_zsh_installer() { STUB_CURRENT_SHELL=/bin/zsh "$ROOT_DIR/install.sh" --no-shell-switch "$@"; }
 
 printf 'case: non-macOS rejection\n'
 STUB_UNAME=Linux run_installer --only zsh >/dev/null 2>&1 && fail 'Linux accepted'
@@ -82,10 +82,14 @@ STUB_UNAME=Linux run_installer --only zsh >/dev/null 2>&1 && fail 'Linux accepte
 
 printf 'case: non-Zsh gate and explicit bootstrap\n'
 : > "$STUB_LOG"
-CURRENT_SHELL_PATH=/bin/bash run_installer --only zsh,zim >/dev/null
+STUB_CURRENT_SHELL=/bin/bash run_installer --only zsh,zim >/dev/null
 assert_absent "$HOME/.zshenv"
 assert_absent "$HOME/.zshrc"
 assert_absent "$HOME/.zimrc"
+assert_absent "$HOME/.zprofile"
+assert_absent "$HOME/.bash_profile"
+assert_absent "$HOME/.profile"
+assert_not_contains "$STUB_LOG" 'brew shellenv'
 assert_not_contains "$STUB_LOG" 'brew install zsh'
 assert_not_contains "$STUB_LOG" 'sudo '
 assert_not_contains "$STUB_LOG" 'chsh '
