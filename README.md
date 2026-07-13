@@ -9,10 +9,10 @@ macOS-only bootstrap repository intended to live at `~/.config`.
 | Group | Components | Installer scope |
 | --- | --- | --- |
 | Shell | `git`, `zsh`, `zim`, `fzf`, `starship`, `tmux` | Packages plus repository-owned configuration |
-| Development CLI | `lazygit`, `vim`, `yazi`, `mole` | Packages plus repository-owned configuration where applicable |
+| Development CLI | `lazygit`, `vim`, `yazi`, `mole`, `gh` | Packages plus repository-owned configuration where applicable |
 | Application | `ccswitch` | Homebrew tap/cask installation and availability verification only |
 
-`ccswitch` installs tap `farion1231/ccswitch` and cask `cc-switch`. It does not manage CCSwitch preferences, accounts, providers, or application state. `mole` installs and verifies the Homebrew formula only; its configuration, logs, and runtime state remain local-only.
+`ccswitch` installs tap `farion1231/ccswitch` and cask `cc-switch`. It does not manage CCSwitch preferences, accounts, providers, or application state. `mole` installs and verifies the Homebrew formula only; its configuration, logs, and runtime state remain local-only. `gh` installs and verifies the GitHub CLI formula only; authentication, accounts, hosts, preferences, extensions, and configuration files remain user-managed.
 
 Removed components are neither installed nor configured. Existing applications and packages are never uninstalled automatically.
 
@@ -40,6 +40,9 @@ Ignore rules apply to untracked files. The installer does not claim, configure, 
 
 # Install Mole only
 ./install.sh --only mole
+
+# Install GitHub CLI only; authenticate separately with gh auth login
+./install.sh --only gh
 
 # Show safe diagnostic output for selection, packages, and stages
 ./install.sh --debug --only mole

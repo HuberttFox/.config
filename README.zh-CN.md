@@ -9,10 +9,10 @@
 | 分类 | 组件 | 安装器范围 |
 | --- | --- | --- |
 | Shell | `git`、`zsh`、`zim`、`fzf`、`starship`、`tmux` | 软件包与仓库自有配置 |
-| 开发 CLI | `lazygit`、`vim`、`yazi`、`mole` | 软件包，以及适用的仓库自有配置 |
+| 开发 CLI | `lazygit`、`vim`、`yazi`、`mole`、`gh` | 软件包，以及适用的仓库自有配置 |
 | 应用 | `ccswitch` | 仅安装 Homebrew tap/cask 并验证可用性 |
 
-`ccswitch` 会安装 tap `farion1231/ccswitch` 与 cask `cc-switch`。安装器不管理 CCSwitch 偏好、账户、Provider 或应用状态。`mole` 只安装并验证 Homebrew formula；其配置、日志与运行时状态仍仅保留在本机。
+`ccswitch` 会安装 tap `farion1231/ccswitch` 与 cask `cc-switch`。安装器不管理 CCSwitch 偏好、账户、Provider 或应用状态。`mole` 只安装并验证 Homebrew formula；其配置、日志与运行时状态仍仅保留在本机。`gh` 只安装并验证 GitHub CLI formula；认证、账户、hosts、偏好、扩展与配置文件仍由用户管理。
 
 已移除组件不会被安装或配置；已有应用和软件包也不会自动卸载。
 
@@ -40,6 +40,9 @@
 
 # 仅安装 Mole
 ./install.sh --only mole
+
+# 仅安装 GitHub CLI；请另行使用 gh auth login 认证
+./install.sh --only gh
 
 # 显示选择、软件包与阶段的安全诊断信息
 ./install.sh --debug --only mole

@@ -11,7 +11,7 @@ source "$ROOT_DIR/scripts/lib/brew.sh"
 # shellcheck source=scripts/lib/transaction.sh
 source "$ROOT_DIR/scripts/lib/transaction.sh"
 
-ALL_COMPONENTS=(git zsh zim fzf starship tmux lazygit vim yazi ccswitch mole)
+ALL_COMPONENTS=(git zsh zim fzf starship tmux lazygit vim yazi ccswitch mole gh)
 SELECTED_COMPONENTS=()
 SKIP_COMPONENTS=()
 NO_SHELL_SWITCH=0

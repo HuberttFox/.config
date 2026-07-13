@@ -70,7 +70,7 @@ EOF
 esac
 STUB
 chmod +x "$TMP_ROOT/bin/stub"
-for name in uname brew git curl zsh ps dscl sudo chsh tmux fzf starship lazygit vim yazi cc-switch mole; do
+for name in uname brew git curl zsh ps dscl sudo chsh tmux fzf starship lazygit vim yazi cc-switch mole gh; do
   ln -s stub "$TMP_ROOT/bin/$name"
 done
 export PATH="$TMP_ROOT/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -100,6 +100,14 @@ assert_not_contains "$STUB_LOG" 'brew tap '
 assert_not_contains "$STUB_LOG" 'brew install --cask'
 assert_absent "$HOME/.config/mole"
 assert_absent "$HOME/mole"
+
+printf 'case: GitHub CLI formula\n'
+: > "$STUB_LOG"
+run_zsh_installer --only gh >/dev/null
+assert_contains "$STUB_LOG" 'brew list --formula gh'
+assert_not_contains "$STUB_LOG" 'brew tap '
+assert_not_contains "$STUB_LOG" 'brew install --cask'
+assert_absent "$HOME/.config/gh"
 
 printf 'case: non-Zsh gate and explicit bootstrap\n'
 rm -f "$HOME/.zprofile" "$HOME/.bash_profile" "$HOME/.profile"
