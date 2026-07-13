@@ -52,9 +52,26 @@ The renderer validates required values, writes atomically, applies mode `0600`, 
 # Exclude components
 ./install.sh --skip tmux,yazi
 
-# Install without changing login shell or starting a new Zsh
+# Install without configuring Zsh when current shell is not Zsh
+./install.sh
+
+# Bootstrap Zsh configuration from another shell
+./install.sh --configure-zsh --only zsh,zim
+
+# Explicitly make macOS system Zsh the login shell
+./install.sh --switch-shell --only zsh
+
+# Keep compatibility with automation that disables shell switching
 ./install.sh --no-shell-switch
 ```
+
+### Package manager
+
+Homebrew installs third-party component formulae, taps, and casks. macOS-provided `/bin/zsh` is the only Zsh used by this installer; it does not install or select Homebrew Zsh. The installer supports macOS only and does not use Linux package managers such as apt, dnf, or pacman. When required Homebrew is absent, it installs Homebrew using its official installer. Zim/TPM downloads remain separate external setup.
+
+### Zsh policy
+
+By default, Zsh and Zim work runs only when current shell is Zsh. From another shell, use `--configure-zsh` to explicitly bootstrap their configuration without changing account settings. `--switch-shell` also enables Zsh configuration, then interactively runs `chsh -s /bin/zsh` only after confirming `/bin/zsh` is registered in `/etc/shells`. Normal installation never edits `/etc/shells`, changes login shell, or replaces current shell process.
 
 The installer:
 
@@ -64,7 +81,7 @@ The installer:
 4. Applies selected configuration.
 5. Verifies every selected component.
 6. Records installer-owned file changes in a transaction.
-7. Optionally registers Zsh, runs `chsh`, persists `brew shellenv`, and starts login Zsh.
+7. With `--switch-shell`, optionally changes login shell to `/bin/zsh`; otherwise it never changes or starts a shell.
 
 Git and tmux use native XDG paths (`~/.config/git/config` and `~/.config/tmux/tmux.conf`). Legacy `~/.gitconfig` and `~/.tmux.conf` loaders are removed only when they exactly match old installer-generated content; unknown files are preserved with a warning.
 
@@ -99,7 +116,7 @@ Transaction data lives under `${XDG_STATE_HOME:-~/.local/state}/dotfiles-install
 
 - Installer-managed replacements are journaled and backed up before mutation.
 - Package installation and external setup still require network access.
-- Without `--no-shell-switch`, selecting Zsh may invoke `sudo`, modify `/etc/shells`, run `chsh`, and replace the current shell process with `zsh -l`.
+- `--switch-shell` may run `chsh`; it never edits `/etc/shells` and never replaces the current shell process. Use `exec /bin/zsh -l` manually after a successful switch.
 - Homebrew environment lines are written transactionally to login profiles.
 - Ignored local application configuration, credentials, sessions, logs, and runtime state remain outside installer scope.
 - Old Finicky files/applications and packages removed from the component list are not deleted automatically.

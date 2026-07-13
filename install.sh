@@ -15,12 +15,15 @@ ALL_COMPONENTS=(git zsh zim fzf starship tmux lazygit vim yazi)
 SELECTED_COMPONENTS=()
 SKIP_COMPONENTS=()
 NO_SHELL_SWITCH=0
+CONFIGURE_ZSH=0
+SWITCH_SHELL=0
+SHELL_SWITCHED=0
 ROLLBACK_SELECTOR=""
 ROLLBACK_FORCE=0
 
 usage() {
   cat <<'USAGE'
-Usage: ./install.sh [--all] [--only a,b,c] [--skip a,b,c] [--no-shell-switch]
+Usage: ./install.sh [--all] [--only a,b,c] [--skip a,b,c] [--configure-zsh] [--switch-shell] [--no-shell-switch]
        ./install.sh --rollback <latest|run-id|all>
        ./install.sh --rollback-force <latest|run-id|all>
 USAGE
@@ -61,7 +64,7 @@ collect_selected_components() {
     SELECTED_COMPONENTS=("${ALL_COMPONENTS[@]}")
   fi
 
-  for name in "${SELECTED_COMPONENTS[@]}"; do
+  for name in "${SELECTED_COMPONENTS[@]-}"; do
     contains_word "$name" "${ALL_COMPONENTS[@]}" || die "Unknown component: $name"
     if [[ ${#SKIP_COMPONENTS[@]} -gt 0 ]] && contains_word "$name" "${SKIP_COMPONENTS[@]}"; then
       continue
@@ -71,7 +74,35 @@ collect_selected_components() {
     filtered+=("$name")
   done
 
-  SELECTED_COMPONENTS=("${filtered[@]}")
+  if [[ ${#filtered[@]} -eq 0 ]]; then
+    SELECTED_COMPONENTS=()
+  else
+    SELECTED_COMPONENTS=("${filtered[@]}")
+  fi
+}
+
+gate_zsh_components() {
+  local current_shell
+  local name
+  local filtered=()
+
+  [[ "$CONFIGURE_ZSH" == "1" ]] && return 0
+  current_shell="$(current_shell_path)"
+  shell_is_zsh "$current_shell" && return 0
+
+  for name in "${SELECTED_COMPONENTS[@]-}"; do
+    [[ -n "$name" ]] || continue
+    if [[ "$name" == zsh || "$name" == zim ]]; then
+      log "Skipping $name because current shell is not Zsh: $current_shell"
+      continue
+    fi
+    filtered+=("$name")
+  done
+  if [[ ${#filtered[@]} -eq 0 ]]; then
+    SELECTED_COMPONENTS=()
+  else
+    SELECTED_COMPONENTS=("${filtered[@]}")
+  fi
 }
 
 install_packages() {
@@ -85,7 +116,8 @@ install_packages() {
   local tap
   local taps_output
 
-  for name in "${SELECTED_COMPONENTS[@]}"; do
+  for name in "${SELECTED_COMPONENTS[@]-}"; do
+    [[ -n "$name" ]] || continue
     script="$(component_script "$name")"
     if taps_output="$($script taps 2>/dev/null)"; then
       while IFS= read -r tap; do
@@ -124,7 +156,8 @@ install_packages() {
 apply_components() {
   local name
   local script
-  for name in "${SELECTED_COMPONENTS[@]}"; do
+  for name in "${SELECTED_COMPONENTS[@]-}"; do
+    [[ -n "$name" ]] || continue
     script="$(component_script "$name")"
     log "Applying component: $name"
     CURRENT_COMPONENT="$name" "$script" apply
@@ -134,7 +167,8 @@ apply_components() {
 verify_components() {
   local name
   local script
-  for name in "${SELECTED_COMPONENTS[@]}"; do
+  for name in "${SELECTED_COMPONENTS[@]-}"; do
+    [[ -n "$name" ]] || continue
     script="$(component_script "$name")"
     log "Verifying component: $name"
     "$script" verify
@@ -158,6 +192,13 @@ while [[ $# -gt 0 ]]; do
       while IFS= read -r item; do
         SKIP_COMPONENTS+=("$item")
       done < <(parse_csv_into_array "$1")
+      ;;
+    --configure-zsh)
+      CONFIGURE_ZSH=1
+      ;;
+    --switch-shell)
+      SWITCH_SHELL=1
+      CONFIGURE_ZSH=1
       ;;
     --no-shell-switch)
       NO_SHELL_SWITCH=1
@@ -194,19 +235,28 @@ fi
 
 [[ "$(basename "$ROOT_DIR")" == ".config" ]] || warn "Expected repo root to be named .config, got: $ROOT_DIR"
 require_non_root_user
+[[ "$SWITCH_SHELL" != "1" || "$NO_SHELL_SWITCH" != "1" ]] || die "--switch-shell cannot be combined with --no-shell-switch"
 collect_selected_components
+if [[ "$SWITCH_SHELL" == "1" ]] && ! contains_word "zsh" "${SELECTED_COMPONENTS[@]}"; then
+  die "--switch-shell requires the zsh component"
+fi
+gate_zsh_components
 
-if contains_word "zsh" "${SELECTED_COMPONENTS[@]}"; then
+if [[ ${#SELECTED_COMPONENTS[@]} -gt 0 ]] && contains_word "zsh" "${SELECTED_COMPONENTS[@]}"; then
   print_shell_detection_context
 fi
-log "Selected components: ${SELECTED_COMPONENTS[*]}"
-transaction_start "$(IFS=,; printf '%s' "${SELECTED_COMPONENTS[*]}")"
+log "Selected components: ${SELECTED_COMPONENTS[*]-}"
+transaction_start "$(IFS=,; printf '%s' "${SELECTED_COMPONENTS[*]-}")"
 trap 'transaction_fail $?' ERR INT TERM
 install_packages
 apply_components
 verify_components
-if [[ "$NO_SHELL_SWITCH" != "1" ]] && contains_word "zsh" "${SELECTED_COMPONENTS[@]}"; then
-  auto_switch_login_shell_to_zsh
+if [[ "$SWITCH_SHELL" == "1" ]] && [[ ${#SELECTED_COMPONENTS[@]} -gt 0 ]] && contains_word "zsh" "${SELECTED_COMPONENTS[@]}"; then
+  if switch_login_shell_to_system_zsh; then
+    SHELL_SWITCHED=1
+  else
+    warn "Zsh configured but login shell was not changed"
+  fi
 fi
 if find_brew_bin >/dev/null 2>&1; then
   activate_brew_shellenv
@@ -215,6 +265,6 @@ fi
 transaction_set_status completed
 trap - ERR INT TERM
 log "Install completed (run: $TRANSACTION_RUN_ID)"
-if [[ "$NO_SHELL_SWITCH" != "1" ]] && contains_word "zsh" "${SELECTED_COMPONENTS[@]}"; then
-  start_interactive_zsh_session
+if [[ "$SHELL_SWITCHED" == "1" ]]; then
+  log "Open a new terminal or run: exec /bin/zsh -l"
 fi
