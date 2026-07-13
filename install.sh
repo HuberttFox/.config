@@ -258,7 +258,7 @@ if [[ "$SWITCH_SHELL" == "1" ]] && [[ ${#SELECTED_COMPONENTS[@]} -gt 0 ]] && con
     warn "Zsh configured but login shell was not changed"
   fi
 fi
-if find_brew_bin >/dev/null 2>&1; then
+if [[ ${#SELECTED_COMPONENTS[@]} -gt 0 ]] && find_brew_bin >/dev/null 2>&1; then
   activate_brew_shellenv
   CURRENT_COMPONENT=brew-shellenv ensure_brew_shellenv_for_shells
 fi

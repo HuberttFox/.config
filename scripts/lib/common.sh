@@ -126,8 +126,8 @@ require_repo_file() {
 }
 
 current_shell_path() {
-  local shell_path="${CURRENT_SHELL_PATH:-}"
-  [[ -n "$shell_path" ]] || { command -v ps >/dev/null 2>&1 && shell_path="$(ps -p "$PPID" -o comm= 2>/dev/null | awk '{$1=$1; print}')"; }
+  local shell_path=""
+  command -v ps >/dev/null 2>&1 && shell_path="$(ps -p "$PPID" -o comm= 2>/dev/null | awk '{$1=$1; print}')"
   [[ -n "$shell_path" ]] || shell_path="${SHELL:-unknown}"
   printf '%s\n' "$shell_path"
 }
@@ -146,7 +146,7 @@ system_zsh_path() {
   printf '%s\n' /bin/zsh
 }
 
-shells_file_path() { printf '%s\n' "${SHELLS_FILE:-/etc/shells}"; }
+shells_file_path() { printf '%s\n' /etc/shells; }
 
 shell_is_registered() {
   local shells_file
