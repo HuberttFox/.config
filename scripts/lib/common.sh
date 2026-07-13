@@ -159,9 +159,20 @@ print_shell_detection_context() {
   log "Login shell: $(login_shell_path)"
 }
 
+has_interactive_terminal() { [[ -t 0 && -t 1 ]]; }
+
+confirm() {
+  local prompt="$1"
+  local answer=""
+  has_interactive_terminal || return 1
+  printf '%s [y/N] ' "$prompt" >&2
+  IFS= read -r answer || return 1
+  [[ "$answer" == y || "$answer" == Y || "$answer" == yes || "$answer" == YES ]]
+}
+
 switch_login_shell_to_system_zsh() {
   local login_shell zsh_path shells_file
-  [[ -t 0 && -t 1 ]] || { warn "Cannot switch login shell without an interactive terminal"; return 1; }
+  has_interactive_terminal || { warn "Cannot switch login shell without an interactive terminal"; return 1; }
   zsh_path="$(system_zsh_path)" || { warn "Missing system Zsh: /bin/zsh"; return 1; }
   login_shell="$(login_shell_path)"
   [[ "$login_shell" == "$zsh_path" ]] && { log "Login shell already uses system Zsh: $zsh_path"; return 0; }
