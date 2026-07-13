@@ -62,25 +62,38 @@ EOF
     fi ;;
   ps) printf '%s\n' "${STUB_CURRENT_SHELL:-/bin/zsh}" ;;
   dscl) printf 'UserShell: /bin/zsh\n' ;;
-  sudo|chsh) fail=1; printf 'unsafe command invoked: %s\n' "$name" >&2; exit 99 ;;
+  sudo|chsh)
+    if [[ "$name" == chsh && "${STUB_ALLOW_CHSH:-0}" == 1 ]]; then exit 0; fi
+    printf 'unsafe command invoked: %s\n' "$name" >&2; exit 99 ;;
   tmux) exit 0 ;;
   *) exit 0 ;;
 esac
 STUB
 chmod +x "$TMP_ROOT/bin/stub"
-for name in uname brew git curl zsh ps dscl sudo chsh tmux fzf starship lazygit vim yazi; do
+for name in uname brew git curl zsh ps dscl sudo chsh tmux fzf starship lazygit vim yazi cc-switch; do
   ln -s stub "$TMP_ROOT/bin/$name"
 done
 export PATH="$TMP_ROOT/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 run_installer() { "$ROOT_DIR/install.sh" --no-shell-switch "$@"; }
 run_zsh_installer() { STUB_CURRENT_SHELL=/bin/zsh "$ROOT_DIR/install.sh" --no-shell-switch "$@"; }
+run_non_zsh_installer() { STUB_CURRENT_SHELL=/bin/bash "$ROOT_DIR/install.sh" "$@"; }
 
 printf 'case: non-macOS rejection\n'
 STUB_UNAME=Linux run_installer --only zsh >/dev/null 2>&1 && fail 'Linux accepted'
 [[ ! -d "$INSTALLER_STATE_DIR/runs" ]] || fail 'transaction created before platform rejection'
 
+printf 'case: CCSwitch cask\n'
+: > "$STUB_LOG"
+run_zsh_installer --only ccswitch >/dev/null
+assert_contains "$STUB_LOG" 'brew tap farion1231/ccswitch'
+assert_contains "$STUB_LOG" 'brew install --cask cc-switch'
+tap_line="$(grep -n -F 'brew tap farion1231/ccswitch' "$STUB_LOG" | cut -d: -f1)"
+cask_line="$(grep -n -F 'brew install --cask cc-switch' "$STUB_LOG" | cut -d: -f1)"
+[[ "$tap_line" -lt "$cask_line" ]] || fail 'CCSwitch cask installed before tap'
+
 printf 'case: non-Zsh gate and explicit bootstrap\n'
+rm -f "$HOME/.zprofile" "$HOME/.bash_profile" "$HOME/.profile"
 : > "$STUB_LOG"
 STUB_CURRENT_SHELL=/bin/bash run_installer --only zsh,zim >/dev/null
 assert_absent "$HOME/.zshenv"
@@ -100,6 +113,18 @@ bootstrap_run="$(cat "$INSTALLER_STATE_DIR/latest")"
 "$ROOT_DIR/install.sh" --rollback "$bootstrap_run" >/dev/null
 assert_absent "$HOME/.zshenv"
 assert_absent "$HOME/.zshrc"
+
+printf 'case: confirmation helper\n'
+printf 'y\n' | bash -c '
+  source "$1/scripts/lib/common.sh"
+  has_interactive_terminal() { return 0; }
+  confirm "Set login shell?" 2>/dev/null
+' _ "$ROOT_DIR" >/dev/null
+printf 'n\n' | bash -c '
+  source "$1/scripts/lib/common.sh"
+  has_interactive_terminal() { return 0; }
+  confirm "Set login shell?" 2>/dev/null
+' _ "$ROOT_DIR" >/dev/null && fail 'negative confirmation accepted'
 
 printf 'case: shell-switch argument validation\n'
 run_zsh_installer --only fzf --switch-shell >/dev/null 2>&1 && fail 'switch without zsh accepted'

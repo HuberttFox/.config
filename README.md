@@ -4,41 +4,27 @@
 
 macOS-only bootstrap repository intended to live at `~/.config`.
 
-## Components
+## Managed components
 
-The installer manages:
+| Group | Components | Installer scope |
+| --- | --- | --- |
+| Shell | `git`, `zsh`, `zim`, `fzf`, `starship`, `tmux` | Packages plus repository-owned configuration |
+| Development CLI | `lazygit`, `vim`, `yazi` | Packages plus repository-owned configuration where applicable |
+| Application | `ccswitch` | Homebrew tap/cask installation and availability verification only |
 
-- Shell: `git`, `zsh`, `zim`, `fzf`, `starship`, `tmux`
-- Development CLI: `lazygit`, `vim`, `yazi`
+`ccswitch` installs tap `farion1231/ccswitch` and cask `cc-switch`. It does not manage CCSwitch preferences, accounts, providers, or application state.
 
-Removed components are no longer installed or configured, but existing applications are not uninstalled.
+Removed components are neither installed nor configured. Existing applications and packages are never uninstalled automatically.
 
-## Secrets
+## Ignored and local-only paths
 
-Tracked `.env.example` defines required variable names without values:
+`.gitignore` excludes machine-specific state outside installer ownership:
 
-```bash
-cp .env.example .env
-chmod 600 .env
-```
+- **Secrets and local overrides:** `.env`, `git/config.local`, `zsh/env.local.zsh`, generated `raycast/ai/providers.yaml`.
+- **Local application and editor configuration:** `claude/`, `codex/`, `cursor/`, `opencode/`, `vscode/`, `fish/`, `alacritty/`, `iterm2/`, `nvim/`, `finicky/`, `mole/`, `rtk/`, `uv/`, and similar application directories.
+- **Runtime, caches, and logs:** `.zcompdump*`, `*.log`, `*.tmp`, Raycast extensions and `node_modules`, `.serena/`, `.backup/`.
 
-Fill local values in `.env`:
-
-```dotenv
-CONTEXT7_API_KEY=
-RAYCAST_MODELSCOPE_API_KEY=
-RAYCAST_PERPLEXITY_API_KEY=
-```
-
-Zsh loads simple `NAME=VALUE` assignments from `.env`. The file is ignored and values are never committed. Move assignments from legacy `zsh/env.local.zsh` manually; that file is no longer sourced.
-
-Raycast does not interpolate `.env` itself. Generate its ignored provider file explicitly:
-
-```bash
-./scripts/render-raycast-providers
-```
-
-The renderer validates required values, writes atomically, applies mode `0600`, and never prints secrets.
+Ignore rules apply to untracked files. The installer does not claim, configure, or roll back ignored local state.
 
 ## Install
 
@@ -52,52 +38,87 @@ The renderer validates required values, writes atomically, applies mode `0600`, 
 # Exclude components
 ./install.sh --skip tmux,yazi
 
-# Install without configuring Zsh when current shell is not Zsh
-./install.sh
-
-# Bootstrap Zsh configuration from another shell
+# Configure Zsh and Zim from another shell without changing login shell
 ./install.sh --configure-zsh --only zsh,zim
 
-# Explicitly make macOS system Zsh the login shell
+# Configure Zsh, then explicitly change login shell to macOS /bin/zsh
 ./install.sh --switch-shell --only zsh
 
-# Keep compatibility with automation that disables shell switching
+# Automation-safe: never prompt or change login shell
 ./install.sh --no-shell-switch
 ```
 
-### Package manager
+### Component lifecycle
 
-Homebrew installs third-party component formulae, taps, and casks. macOS-provided `/bin/zsh` is the only Zsh used by this installer; it does not install or select Homebrew Zsh. The installer supports macOS only and does not use Linux package managers such as apt, dnf, or pacman. When required Homebrew is absent, it installs Homebrew using its official installer. Zim/TPM downloads remain separate external setup.
+1. Reject non-macOS and root execution.
+2. Resolve `--only` / `--skip` into retained components.
+3. Collect and deduplicate Homebrew taps, formulae, and casks.
+4. Install missing Homebrew packages.
+5. Apply selected component configuration.
+6. Verify each selected component.
+7. Record installer-owned file and symlink changes in a transaction.
+8. Persist Homebrew shell environment for non-empty component runs.
+
+Homebrew installs third-party formulae, taps, and casks. The installer uses only macOS-provided `/bin/zsh`; it never installs or selects Homebrew Zsh. It does not use apt, dnf, pacman, or other Linux package managers. If Homebrew is required but absent, its official installer is used.
 
 ### Zsh policy
 
-By default, Zsh and Zim work runs only when current shell is Zsh. From another shell, use `--configure-zsh` to explicitly bootstrap their configuration without changing account settings. `--switch-shell` also enables Zsh configuration, then interactively runs `chsh -s /bin/zsh` only after confirming `/bin/zsh` is registered in `/etc/shells`. Normal installation never edits `/etc/shells`, changes login shell, or replaces current shell process.
+`/bin/zsh` is required whenever `zsh` or `zim` is selected.
 
-The installer:
+| Situation | Behavior |
+| --- | --- |
+| Current shell is Zsh | Apply selected Zsh/Zim configuration normally. |
+| Current shell is not Zsh and `/bin/zsh` is absent | Stop before package installation or transaction with: `安装器仅允许 macos 系统的终端 zsh shell 情况下运行。` |
+| Current shell is not Zsh with an interactive terminal | Ask whether to set login shell to `/bin/zsh` through `chsh`. Accepting applies configuration, then attempts the login-shell change. Declining skips Zsh/Zim and continues other components. |
+| Noninteractive non-Zsh run | Skip Zsh/Zim; use `--configure-zsh` or `--switch-shell` for deterministic behavior. |
+| `--configure-zsh` | Apply Zsh/Zim configuration without `chsh` or prompt. |
+| `--switch-shell` | Apply Zsh configuration, then attempt `chsh -s /bin/zsh` after apply/verify. |
+| `--no-shell-switch` | Suppress the prompt and any `chsh` path; non-Zsh runs skip Zsh/Zim unless `--configure-zsh` is given. |
 
-1. Rejects non-macOS and root execution.
-2. Collects Homebrew taps, formulae, and casks.
-3. Installs missing packages.
-4. Applies selected configuration.
-5. Verifies every selected component.
-6. Records installer-owned file changes in a transaction.
-7. With `--switch-shell`, optionally changes login shell to `/bin/zsh`; otherwise it never changes or starts a shell.
+The installer never edits `/etc/shells` and never replaces the current shell process. After a successful login-shell change, open a new terminal or run `exec /bin/zsh -l` manually.
 
-Git and tmux use native XDG paths (`~/.config/git/config` and `~/.config/tmux/tmux.conf`). Legacy `~/.gitconfig` and `~/.tmux.conf` loaders are removed only when they exactly match old installer-generated content; unknown files are preserved with a warning.
+Git and tmux use native XDG paths: `~/.config/git/config` and `~/.config/tmux/tmux.conf`. Legacy `~/.gitconfig` and `~/.tmux.conf` loaders are removed only if they exactly match old installer-generated content; unknown files remain untouched with a warning.
+
+## Secrets
+
+Tracked `.env.example` declares variable names without values:
+
+```bash
+cp .env.example .env
+chmod 600 .env
+```
+
+Fill local values:
+
+```dotenv
+CONTEXT7_API_KEY=
+RAYCAST_MODELSCOPE_API_KEY=
+RAYCAST_PERPLEXITY_API_KEY=
+```
+
+Zsh loads simple `NAME=VALUE` assignments from `.env`; it does not evaluate arbitrary shell. Move assignments from legacy `zsh/env.local.zsh` manually.
+
+Raycast does not interpolate `.env`. Generate its ignored provider file explicitly:
+
+```bash
+./scripts/render-raycast-providers
+```
+
+The renderer validates values, writes atomically with mode `0600`, and never prints secrets.
 
 ## Safe validation
 
-`--dry-run` was removed because it skipped the operations most likely to fail. Use the sandbox integration suite instead:
+`--dry-run` is intentionally unsupported because it skips operations most likely to fail. Use sandbox integration tests:
 
 ```bash
-tests/integration.sh
+./tests/integration.sh
 ```
 
-It runs real installer `apply` and `verify` paths under temporary `HOME` and state directories with stubbed Homebrew, network, tmux, Serena, `sudo`, and `chsh`. Temporary data is deleted afterward.
+Tests run real `apply` and `verify` paths under temporary `HOME` and state directories with stubbed Homebrew, network, tmux, `sudo`, and `chsh`. Temporary data is removed afterward.
 
 ## File rollback
 
-Every install receives a run ID. File rollback commands:
+Every install receives a run ID:
 
 ```bash
 ./install.sh --rollback latest
@@ -106,17 +127,6 @@ Every install receives a run ID. File rollback commands:
 ./install.sh --rollback-force <latest|run-id|all>
 ```
 
-Normal rollback restores replaced paths and removes paths created by the selected run, newest changes first. If a managed path changed after installation, rollback stops and preserves it. Forced rollback first stores the conflicting current version under the run's `rollback-conflicts/` directory.
+Normal rollback restores replaced paths and removes paths created by the selected run, newest changes first. If a managed path changed later, rollback preserves it and stops. Forced rollback saves the conflicting current version under that run’s `rollback-conflicts/` directory before restoration.
 
-Rollback covers only files and symlinks changed through installer transaction helpers. It does **not** reverse Homebrew packages/taps/casks, `/etc/shells`, `chsh`, TPM or Zim downloads, or application preferences.
-
-Transaction data lives under `${XDG_STATE_HOME:-~/.local/state}/dotfiles-installer`. If installation fails, the error prints the run ID and exact rollback command.
-
-## Important details
-
-- Installer-managed replacements are journaled and backed up before mutation.
-- Package installation and external setup still require network access.
-- `--switch-shell` may run `chsh`; it never edits `/etc/shells` and never replaces the current shell process. Use `exec /bin/zsh -l` manually after a successful switch.
-- Homebrew environment lines are written transactionally to login profiles.
-- Ignored local application configuration, credentials, sessions, logs, and runtime state remain outside installer scope.
-- Old Finicky files/applications and packages removed from the component list are not deleted automatically.
+Rollback covers only files and symlinks changed through transaction helpers. It does **not** reverse Homebrew packages/taps/casks, `chsh`, `/etc/shells`, Zim or TPM downloads, application preferences, or other external state. Transaction data lives under `${XDG_STATE_HOME:-~/.local/state}/dotfiles-installer`.

@@ -11,13 +11,14 @@ source "$ROOT_DIR/scripts/lib/brew.sh"
 # shellcheck source=scripts/lib/transaction.sh
 source "$ROOT_DIR/scripts/lib/transaction.sh"
 
-ALL_COMPONENTS=(git zsh zim fzf starship tmux lazygit vim yazi)
+ALL_COMPONENTS=(git zsh zim fzf starship tmux lazygit vim yazi ccswitch)
 SELECTED_COMPONENTS=()
 SKIP_COMPONENTS=()
 NO_SHELL_SWITCH=0
 CONFIGURE_ZSH=0
 SWITCH_SHELL=0
 SHELL_SWITCHED=0
+PROMPTED_SHELL_SWITCH=0
 ROLLBACK_SELECTOR=""
 ROLLBACK_FORCE=0
 
@@ -85,15 +86,30 @@ gate_zsh_components() {
   local current_shell
   local name
   local filtered=()
+  local zsh_selected=0
 
-  [[ "$CONFIGURE_ZSH" == "1" ]] && return 0
+  for name in "${SELECTED_COMPONENTS[@]-}"; do
+    [[ "$name" == zsh || "$name" == zim ]] && zsh_selected=1
+  done
+  [[ "$zsh_selected" == "1" ]] || return 0
   current_shell="$(current_shell_path)"
   shell_is_zsh "$current_shell" && return 0
+  system_zsh_path >/dev/null || die "安装器仅允许 macos 系统的终端 zsh shell 情况下运行。"
+  [[ "$CONFIGURE_ZSH" == "1" ]] && return 0
+
+  if [[ "$NO_SHELL_SWITCH" != "1" && "$SWITCH_SHELL" != "1" ]] && has_interactive_terminal; then
+    if confirm "Current shell is not Zsh. Set login shell to /bin/zsh with chsh?"; then
+      PROMPTED_SHELL_SWITCH=1
+      return 0
+    fi
+    log "Skipping Zsh components because login-shell switch was declined"
+  else
+    warn "Skipping Zsh components outside Zsh; use --configure-zsh or --switch-shell"
+  fi
 
   for name in "${SELECTED_COMPONENTS[@]-}"; do
     [[ -n "$name" ]] || continue
     if [[ "$name" == zsh || "$name" == zim ]]; then
-      log "Skipping $name because current shell is not Zsh: $current_shell"
       continue
     fi
     filtered+=("$name")
@@ -251,7 +267,7 @@ trap 'transaction_fail $?' ERR INT TERM
 install_packages
 apply_components
 verify_components
-if [[ "$SWITCH_SHELL" == "1" ]] && [[ ${#SELECTED_COMPONENTS[@]} -gt 0 ]] && contains_word "zsh" "${SELECTED_COMPONENTS[@]}"; then
+if [[ "$SWITCH_SHELL" == "1" || "$PROMPTED_SHELL_SWITCH" == "1" ]] && [[ ${#SELECTED_COMPONENTS[@]} -gt 0 ]] && contains_word "zsh" "${SELECTED_COMPONENTS[@]}"; then
   if switch_login_shell_to_system_zsh; then
     SHELL_SWITCHED=1
   else
