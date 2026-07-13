@@ -70,7 +70,7 @@ EOF
 esac
 STUB
 chmod +x "$TMP_ROOT/bin/stub"
-for name in uname brew git curl zsh ps dscl sudo chsh tmux fzf starship lazygit vim yazi cc-switch; do
+for name in uname brew git curl zsh ps dscl sudo chsh tmux fzf starship lazygit vim yazi cc-switch mole; do
   ln -s stub "$TMP_ROOT/bin/$name"
 done
 export PATH="$TMP_ROOT/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -91,6 +91,15 @@ assert_contains "$STUB_LOG" 'brew install --cask cc-switch'
 tap_line="$(grep -n -F 'brew tap farion1231/ccswitch' "$STUB_LOG" | cut -d: -f1)"
 cask_line="$(grep -n -F 'brew install --cask cc-switch' "$STUB_LOG" | cut -d: -f1)"
 [[ "$tap_line" -lt "$cask_line" ]] || fail 'CCSwitch cask installed before tap'
+
+printf 'case: Mole formula\n'
+: > "$STUB_LOG"
+run_zsh_installer --only mole >/dev/null
+assert_contains "$STUB_LOG" 'brew list --formula mole'
+assert_not_contains "$STUB_LOG" 'brew tap '
+assert_not_contains "$STUB_LOG" 'brew install --cask'
+assert_absent "$HOME/.config/mole"
+assert_absent "$HOME/mole"
 
 printf 'case: non-Zsh gate and explicit bootstrap\n'
 rm -f "$HOME/.zprofile" "$HOME/.bash_profile" "$HOME/.profile"
@@ -143,6 +152,17 @@ first_run="$(cat "$INSTALLER_STATE_DIR/latest")"
 run_zsh_installer --only zsh,fzf >/dev/null
 second_run="$(cat "$INSTALLER_STATE_DIR/latest")"
 [[ ! -s "$INSTALLER_STATE_DIR/runs/$second_run/journal.tsv" ]] || fail 'idempotent run changed files'
+
+printf 'case: debug output\n'
+: > "$STUB_LOG"
+run_zsh_installer --only mole > "$TMP_ROOT/normal.out" 2> "$TMP_ROOT/normal.err"
+assert_not_contains "$TMP_ROOT/normal.out" '[DEBUG]'
+assert_not_contains "$TMP_ROOT/normal.err" '[DEBUG]'
+STUB_CURRENT_SHELL=/bin/zsh "$ROOT_DIR/install.sh" --no-shell-switch --debug --only mole > "$TMP_ROOT/debug.out" 2> "$TMP_ROOT/debug.err"
+assert_contains "$TMP_ROOT/debug.err" '[DEBUG] Package plan:'
+assert_contains "$TMP_ROOT/debug.err" '[DEBUG] Homebrew:'
+assert_contains "$TMP_ROOT/debug.err" '[DEBUG] Apply component:'
+assert_not_contains "$TMP_ROOT/debug.err" 'dummy-model-key'
 
 printf 'case: Zim system-Zsh initialization\n'
 rm -rf "$HOME/.zim" "$HOME/.zimrc"

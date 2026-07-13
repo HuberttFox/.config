@@ -9,10 +9,10 @@ macOS-only bootstrap repository intended to live at `~/.config`.
 | Group | Components | Installer scope |
 | --- | --- | --- |
 | Shell | `git`, `zsh`, `zim`, `fzf`, `starship`, `tmux` | Packages plus repository-owned configuration |
-| Development CLI | `lazygit`, `vim`, `yazi` | Packages plus repository-owned configuration where applicable |
+| Development CLI | `lazygit`, `vim`, `yazi`, `mole` | Packages plus repository-owned configuration where applicable |
 | Application | `ccswitch` | Homebrew tap/cask installation and availability verification only |
 
-`ccswitch` installs tap `farion1231/ccswitch` and cask `cc-switch`. It does not manage CCSwitch preferences, accounts, providers, or application state.
+`ccswitch` installs tap `farion1231/ccswitch` and cask `cc-switch`. It does not manage CCSwitch preferences, accounts, providers, or application state. `mole` installs and verifies the Homebrew formula only; its configuration, logs, and runtime state remain local-only.
 
 Removed components are neither installed nor configured. Existing applications and packages are never uninstalled automatically.
 
@@ -37,6 +37,12 @@ Ignore rules apply to untracked files. The installer does not claim, configure, 
 
 # Exclude components
 ./install.sh --skip tmux,yazi
+
+# Install Mole only
+./install.sh --only mole
+
+# Show safe diagnostic output for selection, packages, and stages
+./install.sh --debug --only mole
 
 # Configure Zsh and Zim from another shell without changing login shell
 ./install.sh --configure-zsh --only zsh,zim
@@ -75,9 +81,13 @@ Homebrew installs third-party formulae, taps, and casks. The installer uses only
 | `--switch-shell` | Apply Zsh configuration, then attempt `chsh -s /bin/zsh` after apply/verify. |
 | `--no-shell-switch` | Suppress the prompt and any `chsh` path; non-Zsh runs skip Zsh/Zim unless `--configure-zsh` is given. |
 
-The installer never edits `/etc/shells` and never replaces the current shell process. After a successful login-shell change, open a new terminal or run `exec /bin/zsh -l` manually.
+The installer never edits `/etc/shells` and never replaces the current shell process. After a successful login-shell change, open a new terminal or run `exec /bin/zsh -l` manually. The confirmation prompt names the detected current shell, the persistent `/bin/zsh` `chsh` change, and the decline behavior; declining skips Zsh/Zim and continues other components.
 
 Git and tmux use native XDG paths: `~/.config/git/config` and `~/.config/tmux/tmux.conf`. Legacy `~/.gitconfig` and `~/.tmux.conf` loaders are removed only if they exactly match old installer-generated content; unknown files remain untouched with a warning.
+
+### Runtime output and diagnostics
+
+Normal output reports the install plan, package/apply/verify stages, warnings, and transaction run ID. Use `--debug` for additional non-sensitive diagnostics: resolved component selection, tap/formula/cask plan, component script path, Homebrew path, transaction ID, and package commands issued through the installer wrapper. Debug mode does not enable shell tracing, print environment variables or `.env` values, or replace the sandbox integration tests.
 
 ## Secrets
 
