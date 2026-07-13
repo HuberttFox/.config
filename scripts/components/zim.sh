@@ -32,7 +32,7 @@ apply_component() {
   fi
 
   if [[ ! -e "$zim_init_path" || "$zim_init_path" -ot "$CONFIG_REPO/zsh/zimrc" ]]; then
-    zsh_cmd="$(command_path zsh 2>/dev/null)" || die "zsh not found"
+    zsh_cmd="$(system_zsh_path)" || die "Missing system Zsh: /bin/zsh"
     ZIM_HOME="$zim_home" ZIM_CONFIG_FILE="$CONFIG_REPO/zsh/zimrc" \
       "$zsh_cmd" -c 'source "$1" init' _ "$zimfw_path"
   else

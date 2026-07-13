@@ -6,6 +6,7 @@ source "$ROOT_DIR/scripts/lib/common.sh"
 initialize_common_state
 
 apply_component() {
+  system_zsh_path >/dev/null || die "Missing system Zsh: /bin/zsh"
   require_repo_file "zsh/zshrc"
   require_repo_file "zsh/zshenv"
 
@@ -23,12 +24,13 @@ MANAGED
 }
 
 verify_component() {
+  system_zsh_path >/dev/null || die "Missing system Zsh: /bin/zsh"
   [[ -f "$HOME/.zshenv" ]] || die "Missing ~/.zshenv"
   [[ -f "$HOME/.zshrc" ]] || die "Missing ~/.zshrc"
 }
 
 case "${1:-}" in
-  formulae) printf 'zsh\n' ;;
+  formulae) ;;
   casks) ;;
   apply) apply_component ;;
   verify) verify_component ;;

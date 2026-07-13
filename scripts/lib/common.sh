@@ -126,11 +126,13 @@ require_repo_file() {
 }
 
 current_shell_path() {
-  local shell_path=""
-  command -v ps >/dev/null 2>&1 && shell_path="$(ps -p $$ -o comm= 2>/dev/null | awk '{$1=$1; print}')"
+  local shell_path="${CURRENT_SHELL_PATH:-}"
+  [[ -n "$shell_path" ]] || { command -v ps >/dev/null 2>&1 && shell_path="$(ps -p "$PPID" -o comm= 2>/dev/null | awk '{$1=$1; print}')"; }
   [[ -n "$shell_path" ]] || shell_path="${SHELL:-unknown}"
   printf '%s\n' "$shell_path"
 }
+
+shell_is_zsh() { [[ "$(basename "$1")" == zsh ]]; }
 
 login_shell_path() {
   local username="${USER:-$(id -un)}"
@@ -139,23 +141,17 @@ login_shell_path() {
   printf '%s\n' "${shell_path:-unknown}"
 }
 
-preferred_zsh_path() {
-  local candidate
-  command -v zsh >/dev/null 2>&1 && { command -v zsh; return; }
-  for candidate in /opt/homebrew/bin/zsh /usr/local/bin/zsh /bin/zsh /usr/bin/zsh; do
-    [[ -x "$candidate" ]] && { printf '%s\n' "$candidate"; return; }
-  done
-  return 1
+system_zsh_path() {
+  [[ -x /bin/zsh ]] || return 1
+  printf '%s\n' /bin/zsh
 }
 
-shell_is_registered() { [[ -r /etc/shells ]] && grep -Fqx "$1" /etc/shells; }
+shells_file_path() { printf '%s\n' "${SHELLS_FILE:-/etc/shells}"; }
 
-ensure_shell_registered() {
-  local shell_path="$1"
-  shell_is_registered "$shell_path" && return 0
-  [[ -t 0 && -t 1 ]] || { warn "Cannot register $shell_path without an interactive terminal"; return 1; }
-  command -v sudo >/dev/null 2>&1 || { warn "sudo unavailable"; return 1; }
-  printf '%s\n' "$shell_path" | sudo tee -a /etc/shells >/dev/null
+shell_is_registered() {
+  local shells_file
+  shells_file="$(shells_file_path)"
+  [[ -r "$shells_file" ]] && grep -Fqx "$1" "$shells_file"
 }
 
 print_shell_detection_context() {
@@ -163,23 +159,16 @@ print_shell_detection_context() {
   log "Login shell: $(login_shell_path)"
 }
 
-auto_switch_login_shell_to_zsh() {
-  local login_shell zsh_path
+switch_login_shell_to_system_zsh() {
+  local login_shell zsh_path shells_file
+  [[ -t 0 && -t 1 ]] || { warn "Cannot switch login shell without an interactive terminal"; return 1; }
+  zsh_path="$(system_zsh_path)" || { warn "Missing system Zsh: /bin/zsh"; return 1; }
   login_shell="$(login_shell_path)"
-  [[ "$login_shell" == */zsh ]] && { log "Login shell already uses zsh: $login_shell"; return; }
-  zsh_path="$(preferred_zsh_path)" || { warn "Unable to resolve zsh"; return; }
-  shell_is_registered "$zsh_path" || ensure_shell_registered "$zsh_path" || return 0
-  chsh -s "$zsh_path" || warn "Automatic shell switch failed; run: chsh -s $zsh_path"
-}
-
-start_interactive_zsh_session() {
-  local current_shell zsh_path
-  [[ -t 0 && -t 1 ]] || return 0
-  current_shell="$(current_shell_path)"
-  [[ "$current_shell" != */zsh ]] || return 0
-  zsh_path="$(preferred_zsh_path)" || return 0
-  export SHELL="$zsh_path"
-  exec "$zsh_path" -l
+  [[ "$login_shell" == "$zsh_path" ]] && { log "Login shell already uses system Zsh: $zsh_path"; return 0; }
+  shells_file="$(shells_file_path)"
+  shell_is_registered "$zsh_path" || { warn "$zsh_path is not registered in $shells_file; register it before switching shells"; return 1; }
+  chsh -s "$zsh_path" || { warn "Shell switch failed; run: chsh -s $zsh_path"; return 1; }
+  log "Login shell switched to system Zsh: $zsh_path"
 }
 
 command_path() {
