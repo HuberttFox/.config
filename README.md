@@ -16,6 +16,9 @@ macOS-only bootstrap repository intended to live at `~/.config`. Installer manag
 # Exclude components
 ./install.sh --skip tmux,yazi
 
+# AI coding agents only
+./install.sh --only opencode,codex,claude-code,pi
+
 # Automation-safe: never prompt or change login shell
 ./install.sh --no-shell-switch
 
@@ -31,6 +34,7 @@ Installer runs `install packages → apply configuration → verify`, journaling
 | --- | --- |
 | Shell | `git`, `zsh`, `zim`, `fzf`, `starship`, `tmux` |
 | Development CLI | `lazygit`, `vim`, `yazi`, `mole`, `gh` |
+| AI coding agents | `opencode`, `codex`, `claude-code`, `pi` |
 | Application | `ccswitch` |
 
 Full per-component reference (formulae, taps, casks, apply/verify behavior): [docs/components.md](docs/components.md).
@@ -47,3 +51,7 @@ Full per-component reference (formulae, taps, casks, apply/verify behavior): [do
 ## License
 
 MIT
+
+## Contacts
+
+- GitHub: [HuberttFox/.config](https://github.com/HuberttFox/.config)

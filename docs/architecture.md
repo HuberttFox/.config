@@ -126,7 +126,7 @@ The installer never edits `/etc/shells` and never replaces the current shell pro
 Repository configuration is limited to files consumed by retained components or native macOS paths.
 
 - Git and tmux use native XDG paths: `~/.config/git/config`, `~/.config/tmux/tmux.conf`. Legacy `~/.gitconfig` and `~/.tmux.conf` loaders are removed only if they exactly match old installer-generated content; unknown files are preserved with a warning.
-- Ignored local state (`.gitignore`): secrets and local overrides (`.env`, `git/config.local`, `zsh/env.local.zsh`), application/editor configs (`opencode/`, `codex/`, `cursor/`, `vscode/`, `fish/`, etc.), runtime/cache/logs (`.zcompdump*`, `*.log`, `*.tmp`, Raycast extensions, `.serena/`, `.backup/`).
+- Ignored local state (`.gitignore`): secrets and local overrides (`.env`, `git/config.local`, `zsh/env.local.zsh`), application/editor configs (`opencode/`, `codex/`, `claude/`, `pi/`, `cursor/`, `vscode/`, `fish/`, etc.), runtime/cache/logs (`.zcompdump*`, `*.log`, `*.tmp`, Raycast extensions, `.serena/`, `.backup/`).
 - The installer does not claim, configure, or roll back ignored local state.
 
 ## Runtime output and diagnostics

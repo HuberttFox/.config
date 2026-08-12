@@ -126,7 +126,7 @@ flowchart LR
 仓库配置仅限于保留组件消费的文件或 macOS 原生路径。
 
 - Git 与 tmux 使用原生 XDG 路径：`~/.config/git/config`、`~/.config/tmux/tmux.conf`。旧 `~/.gitconfig` 和 `~/.tmux.conf` loader 仅在内容完全匹配旧安装器模板时移除；未知文件会保留并发出警告。
-- 忽略的本地状态（`.gitignore`）：密钥与本地覆盖（`.env`、`git/config.local`、`zsh/env.local.zsh`）、应用/编辑器配置（`opencode/`、`codex/`、`cursor/`、`vscode/`、`fish/` 等）、运行时/缓存/日志（`.zcompdump*`、`*.log`、`*.tmp`、Raycast extensions、`.serena/`、`.backup/`）。
+- 忽略的本地状态（`.gitignore`）：密钥与本地覆盖（`.env`、`git/config.local`、`zsh/env.local.zsh`）、应用/编辑器配置（`opencode/`、`codex/`、`claude/`、`pi/`、`cursor/`、`vscode/`、`fish/` 等）、运行时/缓存/日志（`.zcompdump*`、`*.log`、`*.tmp`、Raycast extensions、`.serena/`、`.backup/`）。
 - 安装器不声明、不配置、不回滚被忽略的本地状态。
 
 ## 运行输出与诊断

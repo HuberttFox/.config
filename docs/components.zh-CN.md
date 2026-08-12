@@ -2,7 +2,7 @@
 
 [English](components.md) | **简体中文**
 
-全部 12 个安装器组件的逐组件参考。每个组件脚本实现 `formulae`、`taps`、`casks`、`apply`、`verify` 的子集。组件模型见 [架构](architecture.zh-CN.md)。
+全部 16 个安装器组件的逐组件参考。每个组件脚本实现 `formulae`、`taps`、`casks`、`apply`、`verify` 的子集。组件模型见 [架构](architecture.zh-CN.md)。
 
 ## 汇总
 
@@ -20,6 +20,10 @@
 | `ccswitch` | — | tap `farion1231/ccswitch`，cask `cc-switch` | 空操作 | app 或命令 |
 | `mole` | `mole` | — | 空操作 | `mole` 可用 |
 | `gh` | `gh` | — | 空操作 | `gh` 可用 |
+| `opencode` | `opencode` | tap `anomalyco/tap` | 空操作 | `opencode` 可用 |
+| `codex` | — | cask `codex` | 空操作 | `codex` 可用 |
+| `claude-code` | — | cask `claude-code` | 空操作 | `claude` 可用 |
+| `pi` | `pi-coding-agent` | — | 空操作 | `pi` 可用 |
 
 ## 配置归属
 
@@ -37,6 +41,7 @@
 仅软件包组件——无仓库管理配置：
 
 - `lazygit`、`vim`、`yazi`、`mole`、`gh`：仅安装 formula 并验证可用性。认证、账户、扩展、偏好与状态仍由用户管理。
+- `opencode`、`codex`、`claude-code`、`pi`：AI 编码代理 CLI，仅安装软件包并验证可用性。`opencode` 组件使用 `anomalyco/tap` 获取最新发布。认证、账户、偏好与运行时状态仍由用户管理；其配置目录（`opencode/`、`codex/`、`claude/`、`pi/`）已 gitignore。
 - `ccswitch`：仅 tap + cask + 可用性验证。不管理 CCSwitch 偏好、账户、Provider 或应用状态。
 
 ## 备注

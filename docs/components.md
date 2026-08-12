@@ -2,7 +2,7 @@
 
 **English** | [简体中文](components.zh-CN.md)
 
-Per-component reference for all 12 installer components. Each component script implements a subset of `formulae`, `taps`, `casks`, `apply`, `verify`. See [Architecture](architecture.md) for the component model.
+Per-component reference for all 16 installer components. Each component script implements a subset of `formulae`, `taps`, `casks`, `apply`, `verify`. See [Architecture](architecture.md) for the component model.
 
 ## Summary
 
@@ -20,6 +20,10 @@ Per-component reference for all 12 installer components. Each component script i
 | `ccswitch` | — | tap `farion1231/ccswitch`, cask `cc-switch` | No-op | app or command |
 | `mole` | `mole` | — | No-op | `mole` available |
 | `gh` | `gh` | — | No-op | `gh` available |
+| `opencode` | `opencode` | tap `anomalyco/tap` | No-op | `opencode` available |
+| `codex` | — | cask `codex` | No-op | `codex` available |
+| `claude-code` | — | cask `claude-code` | No-op | `claude` available |
+| `pi` | `pi-coding-agent` | — | No-op | `pi` available |
 
 ## Configuration ownership
 
@@ -37,6 +41,7 @@ Repository-owned config (tracked files consumed at runtime):
 Package-only components — no repository-managed configuration:
 
 - `lazygit`, `vim`, `yazi`, `mole`, `gh`: formula + availability verification only. Auth, accounts, extensions, preferences, and state remain user-managed.
+- `opencode`, `codex`, `claude-code`, `pi`: AI coding agent CLIs, package + availability only. The `opencode` component uses the `anomalyco/tap` tap for up-to-date releases. Auth, accounts, preferences, and runtime state remain user-managed; their config directories (`opencode/`, `codex/`, `claude/`, `pi/`) are gitignored.
 - `ccswitch`: tap + cask + availability only. Does not manage CCSwitch preferences, accounts, providers, or application state.
 
 ## Notes

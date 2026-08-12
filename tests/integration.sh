@@ -70,7 +70,7 @@ EOF
 esac
 STUB
 chmod +x "$TMP_ROOT/bin/stub"
-for name in uname brew git curl zsh ps dscl sudo chsh tmux fzf starship lazygit vim yazi cc-switch mole gh; do
+for name in uname brew git curl zsh ps dscl sudo chsh tmux fzf starship lazygit vim yazi cc-switch mole gh opencode codex claude pi; do
   ln -s stub "$TMP_ROOT/bin/$name"
 done
 export PATH="$TMP_ROOT/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -108,6 +108,38 @@ assert_contains "$STUB_LOG" 'brew list --formula gh'
 assert_not_contains "$STUB_LOG" 'brew tap '
 assert_not_contains "$STUB_LOG" 'brew install --cask'
 assert_absent "$HOME/.config/gh"
+
+printf 'case: OpenCode formula\n'
+: > "$STUB_LOG"
+run_zsh_installer --only opencode >/dev/null
+assert_contains "$STUB_LOG" 'brew tap anomalyco/tap'
+assert_contains "$STUB_LOG" 'brew list --formula opencode'
+assert_not_contains "$STUB_LOG" 'brew install --cask'
+tap_line="$(grep -n -F 'brew tap anomalyco/tap' "$STUB_LOG" | cut -d: -f1)"
+formula_line="$(grep -n -F 'brew list --formula opencode' "$STUB_LOG" | cut -d: -f1)"
+[[ "$tap_line" -lt "$formula_line" ]] || fail 'OpenCode formula resolved before tap'
+
+printf 'case: Codex cask\n'
+: > "$STUB_LOG"
+run_zsh_installer --only codex >/dev/null
+assert_contains "$STUB_LOG" 'brew install --cask codex'
+assert_not_contains "$STUB_LOG" 'brew tap '
+assert_absent "$HOME/.codex"
+
+printf 'case: Claude Code cask\n'
+: > "$STUB_LOG"
+run_zsh_installer --only claude-code >/dev/null
+assert_contains "$STUB_LOG" 'brew install --cask claude-code'
+assert_not_contains "$STUB_LOG" 'brew tap '
+assert_absent "$HOME/.claude"
+
+printf 'case: Pi formula\n'
+: > "$STUB_LOG"
+run_zsh_installer --only pi >/dev/null
+assert_contains "$STUB_LOG" 'brew list --formula pi-coding-agent'
+assert_not_contains "$STUB_LOG" 'brew tap '
+assert_not_contains "$STUB_LOG" 'brew install --cask'
+assert_absent "$HOME/.config/pi"
 
 printf 'case: non-Zsh gate and explicit bootstrap\n'
 rm -f "$HOME/.zprofile" "$HOME/.bash_profile" "$HOME/.profile"

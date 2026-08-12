@@ -16,6 +16,9 @@
 # 排除组件
 ./install.sh --skip tmux,yazi
 
+# 仅安装 AI 编码代理
+./install.sh --only opencode,codex,claude-code,pi
+
 # 自动化安全模式：绝不询问或更改登录 Shell
 ./install.sh --no-shell-switch
 
@@ -31,6 +34,7 @@
 | --- | --- |
 | Shell | `git`、`zsh`、`zim`、`fzf`、`starship`、`tmux` |
 | 开发 CLI | `lazygit`、`vim`、`yazi`、`mole`、`gh` |
+| AI 编码代理 | `opencode`、`codex`、`claude-code`、`pi` |
 | 应用 | `ccswitch` |
 
 逐组件参考（formula、tap、cask、apply/verify 行为）：[docs/components.zh-CN.md](docs/components.zh-CN.md)。
@@ -47,3 +51,7 @@
 ## 许可证
 
 MIT
+
+## 联系
+
+- GitHub: [HuberttFox/.config](https://github.com/HuberttFox/.config)
