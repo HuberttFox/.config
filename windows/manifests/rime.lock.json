@@ -1,0 +1,69 @@
+{
+  "format": 1,
+  "weasel": {
+    "version": "0.17.4",
+    "url": "https://github.com/rime/weasel/releases/download/0.17.4/weasel-0.17.4.0-installer.exe",
+    "sha256": "cf509534a8f5f8af9c98ed7cbb8f135439f145a8cbe7e50ede42bb5b5ab45c29",
+    "installArgs": "/S",
+    "installDirRegistry": "HKLM\\Software\\Rime\\Weasel\\InstallDir"
+  },
+  "sources": {
+    "ice": {
+      "repository": "iDvel/rime-ice",
+      "commit": "9e66b0729083b37d217312294f6d516c8d7234be",
+      "url": "https://codeload.github.com/iDvel/rime-ice/zip/9e66b0729083b37d217312294f6d516c8d7234be",
+      "sha256": "85c66668255de755b51d3513ecdc612eada0e0b8d4ea27716a046257f17464e0"
+    },
+    "mint": {
+      "repository": "Mintimate/oh-my-rime",
+      "commit": "660471510ac3625734a8991947e2a800de68cbe0",
+      "url": "https://codeload.github.com/Mintimate/oh-my-rime/zip/660471510ac3625734a8991947e2a800de68cbe0",
+      "sha256": "d970d7dfd2256b267f613c112a396514a0394b3569d3702e896adf4569b3660d"
+    },
+    "moqi": {
+      "repository": "gaboolic/rime-shuangpin-fuzhuma",
+      "commit": "c7c6de782c14c27541f7a8ce12be900f1f046f43",
+      "url": "https://codeload.github.com/gaboolic/rime-shuangpin-fuzhuma/zip/c7c6de782c14c27541f7a8ce12be900f1f046f43",
+      "sha256": "f49587a1cef22634f2e8bb4dd1082db220591a3f19bb9f110107a55ebe80828a",
+      "variants": {
+        "lite": {
+          "default": true,
+          "dictionary": "moqi_wan.lite",
+          "schemas": ["moqi_wan_flypymo", "moqi_single_xh"],
+          "omits": ["cn_dicts/41448", "cn_dicts/GB18030-2022", "cn_dicts_cell"]
+        },
+        "full": {
+          "default": false,
+          "dictionary": "moqi_wan.extended",
+          "schemas": ["moqi_wan_flypymo", "moqi_single_xh"],
+          "recipe": "recipes/full.recipe.yaml"
+        }
+      }
+    },
+    "stroke": {
+      "repository": "rime/rime-stroke",
+      "commit": "1e8fff9b9494ddec23b0cbc526bcfd8171a6fd48",
+      "url": "https://codeload.github.com/rime/rime-stroke/zip/1e8fff9b9494ddec23b0cbc526bcfd8171a6fd48",
+      "sha256": "058ffc2a3ce4de7137a170cf38feeeef06dcfac040ed3d173589d43d7dd7fc95"
+    },
+    "cangjie": {
+      "repository": "rime/rime-cangjie",
+      "commit": "52d90a1b1312e74042b38c1cbc8142defbc53171",
+      "url": "https://codeload.github.com/rime/rime-cangjie/zip/52d90a1b1312e74042b38c1cbc8142defbc53171",
+      "sha256": "1e727d65b3ad7cf61fdc7d476d58ab7217a421770d7e2feb94fdf1a4595166f9"
+    },
+    "luna": {
+      "repository": "rime/rime-luna-pinyin",
+      "commit": "56b934b099dfbeab842320f13aa8b461a6ab3e42",
+      "url": "https://codeload.github.com/rime/rime-luna-pinyin/zip/56b934b099dfbeab842320f13aa8b461a6ab3e42",
+      "sha256": "96f96206361a9f5e9ec5af7f102cb1c6b04e3f394746150e5fa62ae87290f9c2"
+    }
+  },
+  "ui": {
+    "fontFace": "Cascadia Code NF, Microsoft YaHei",
+    "fontPoint": 14,
+    "horizontal": true,
+    "candidateListLayout": "linear",
+    "inlinePreedit": false
+  }
+}
