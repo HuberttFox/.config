@@ -52,7 +52,8 @@ function Assert-RimeWindowsHost {
         throw "Windows 11 build 22000 or later is required; detected $($info.ProductName) build $($info.BuildNumber)"
     }
     if (-not [bool]$info.Is64BitOperatingSystem) { throw '64-bit Windows is required' }
-    return $info
+    # Deliberately emit nothing: callers use this as a guard, and a leaked host
+    # info object corrupts their return values (for example Get-RimeCurrentSid).
 }
 
 function Assert-RimePowerShell7X64 {
@@ -60,7 +61,7 @@ function Assert-RimePowerShell7X64 {
     if ([int]$info.PowerShellMajor -lt 7 -or -not [bool]$info.Is64BitProcess) {
         throw '64-bit PowerShell 7 is required'
     }
-    return $info
+    # See Assert-RimeWindowsHost: guard only, never pipeline output.
 }
 
 function Get-RimeCurrentSid {

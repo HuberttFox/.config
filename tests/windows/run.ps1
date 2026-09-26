@@ -1564,11 +1564,13 @@ try {
                 return [pscustomobject]@{ Platform = [PlatformID]::Win32NT; ProductName = 'Windows 11 Pro'; BuildNumber = '22000'; Is64BitOperatingSystem = $true; Is64BitProcess = $false; PowerShellMajor = 7 }
             }
             Assert-RimeWindowsHost
+            Assert (@(Assert-RimeWindowsHost).Count -eq 0) 'Windows host assertion leaked host info output'
             Throws { Assert-RimePowerShell7X64 } '64-bit PowerShell 7'
             function Get-RimeWindowsHostInfo {
                 return [pscustomobject]@{ Platform = [PlatformID]::Win32NT; ProductName = 'Windows 11 Pro'; BuildNumber = '22631'; Is64BitOperatingSystem = $true; Is64BitProcess = $true; PowerShellMajor = 7 }
             }
             Assert-RimeWindowsHost
+            Assert (@(Assert-RimePowerShell7X64).Count -eq 0) 'PowerShell assertion leaked host info output'
             Assert-RimePowerShell7X64
         } finally {
             Set-Item -Path Function:Get-RimeWindowsHostInfo -Value $hostInfoFunction
