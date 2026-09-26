@@ -503,6 +503,14 @@ try {
         Assert ($installerText -match 'function Invoke-RimeElevatedInstaller\(\[string\]\$InstallerPath, \[string\]\$Arguments, \[string\]\$ExpectedSha256\)') 'installer launcher has no expected checksum parameter'
         Assert ($installerText -match 'Assert-RimePinnedHash \$InstallerPath \$ExpectedSha256') 'installer launcher skips final pinned checksum validation'
         Assert ($installerText -match 'Invoke-RimeElevatedInstaller \$installer \(\[string\]\$lock\.weasel\.installArgs\) \(\[string\]\$lock\.weasel\.sha256\)') 'runtime installer call does not supply pinned checksum'
+        $launcher = [regex]::Match($installerText, 'function Invoke-RimeElevatedInstaller[\s\S]*?\n\}').Value
+        Assert ($launcher -notmatch '-Verb RunAs[^\r\n]*-Wait\b') 'installer launcher waits on the installer process tree (WeaselServer keeps it alive)'
+        Assert ($launcher -match 'WaitForExit\(\)') 'installer launcher does not wait for the installer process'
+    }
+    Case 'Weasel InstallDir lookup covers the 32-bit registry view' {
+        $body = (Get-Command Get-RimeWeaselInstallDirectory -CommandType Function).ScriptBlock.ToString()
+        Assert ($body -match 'WOW6432Node') 'Weasel InstallDir lookup ignores the 32-bit registry view'
+        Assert ($body -match 'WeaselRoot') 'Weasel InstallDir lookup ignores the versioned WeaselRoot value'
     }
     Case 'Weasel launch refuses a reparse install directory before Start-Process' {
         $real = Join-Path $temp 'weasel-launch-real'; $link = Join-Path $temp 'weasel-launch-link'

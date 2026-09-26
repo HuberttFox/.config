@@ -156,7 +156,11 @@ function Invoke-RimeElevatedInstaller([string]$InstallerPath, [string]$Arguments
     Assert-RimePinnedHash $InstallerPath $ExpectedSha256
     $InstallerPath = Assert-RimePlainExistingFile $InstallerPath 'Weasel installer'
     Assert-RimePinnedHash $InstallerPath $ExpectedSha256
-    $process = Start-Process -FilePath $InstallerPath -ArgumentList @($Arguments) -Verb RunAs -Wait -PassThru -ErrorAction Stop
+    # Wait only for the installer process, never for its descendants: the Weasel
+    # installer starts the long-lived WeaselServer, and Start-Process -Wait would
+    # wait on that process tree forever.
+    $process = Start-Process -FilePath $InstallerPath -ArgumentList @($Arguments) -Verb RunAs -PassThru -ErrorAction Stop
+    $process.WaitForExit()
     if ($process.ExitCode -ne 0) { throw "Weasel installer failed with exit code $($process.ExitCode)" }
 }
 

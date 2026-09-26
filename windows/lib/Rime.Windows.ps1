@@ -408,12 +408,23 @@ function Test-RimeVersionMatch([string]$Actual, [string]$Expected) {
 function Get-RimeWeaselInstallDirectory([string]$ExplicitDirectory) {
     $candidate = $ExplicitDirectory
     if ([string]::IsNullOrWhiteSpace($candidate)) {
+        # Weasel 0.17.4 is a 32-bit installer and writes its machine key under
+        # WOW6432Node, invisible to this 64-bit process through the native view.
         # Read the property defensively: member access on a missing registry value
         # is an error under Set-StrictMode -Version Latest, not $null.
-        $registered = Get-ItemProperty -Path 'HKLM:\Software\Rime\Weasel' -ErrorAction SilentlyContinue
-        if ($null -ne $registered) {
-            $property = $registered.PSObject.Properties['InstallDir']
-            if ($null -ne $property) { $candidate = [string]$property.Value }
+        foreach ($registryPath in @('HKLM:\Software\Rime\Weasel', 'HKLM:\Software\WOW6432Node\Rime\Weasel')) {
+            $registered = Get-ItemProperty -Path $registryPath -ErrorAction SilentlyContinue
+            if ($null -eq $registered) { continue }
+            # WeaselRoot points at the versioned runtime directory that holds
+            # WeaselServer.exe; InstallDir is the parent and is only a fallback.
+            foreach ($valueName in @('WeaselRoot', 'InstallDir')) {
+                $property = $registered.PSObject.Properties[$valueName]
+                if ($null -ne $property -and -not [string]::IsNullOrWhiteSpace([string]$property.Value)) {
+                    $candidate = [string]$property.Value
+                    break
+                }
+            }
+            if (-not [string]::IsNullOrWhiteSpace($candidate)) { break }
         }
     }
     if ([string]::IsNullOrWhiteSpace($candidate)) { throw 'Weasel InstallDir not found; install Weasel 0.17.4 first' }
