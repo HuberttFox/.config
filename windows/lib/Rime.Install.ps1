@@ -229,7 +229,7 @@ function Add-RimeMoqiStageLockIdentityParts($Parts, [string]$Name, $Entry) {
     foreach ($property in @('repository', 'commit', 'url', 'sha256')) {
         $entryProperty = $Entry.PSObject.Properties[$property]
         if ($null -eq $entryProperty -or [string]::IsNullOrWhiteSpace([string]$entryProperty.Value)) {
-            throw "Moqi stage lock entry has no $property: $Name"
+            throw "Moqi stage lock entry has no ${property}: $Name"
         }
         $value = [string]$entryProperty.Value
         if ($property -eq 'commit' -and $value -notmatch '^[0-9a-fA-F]{40}$') {
@@ -464,7 +464,7 @@ function Copy-RimeHttpsUriToNewFile([Uri]$Uri, [string]$Destination, [string]$Pu
                 continue
             }
             if (-not $response.IsSuccessStatusCode) {
-                throw "RIME HTTPS download failed with status $status: $currentUri"
+                throw "RIME HTTPS download failed with status ${status}: $currentUri"
             }
             $input = $response.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
             try {

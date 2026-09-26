@@ -801,6 +801,15 @@ try {
             Assert ($first -eq '#requires -Version 7.0') "PowerShell 7 requirement missing: $($path.FullName)"
         }
     }
+    Case 'Windows RIME PowerShell sources parse without errors' {
+        $sources = Get-ChildItem (Join-Path $repo 'windows'), (Join-Path $repo 'tests/windows') -Recurse -Filter '*.ps1'
+        $parseFailures = foreach ($source in $sources) {
+            $tokens = $null; $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($source.FullName, [ref]$tokens, [ref]$parseErrors) | Out-Null
+            if ($parseErrors.Count) { "$($source.FullName): $(($parseErrors | ForEach-Object { $_.Message }) -join '; ')" }
+        }
+        Assert (-not $parseFailures) "PowerShell parse errors: $($parseFailures -join ' | ')"
+    }
     Case 'PowerShell 7 is default and deployment mode arguments are explicit' {
         Assert ((Get-RimePowerShell7Command) -eq 'pwsh.exe') 'PowerShell 7 default changed'
         Assert ((@(Get-RimeDeployArguments 'Interactive')).Count -eq 0) 'Interactive unexpectedly quiet'
