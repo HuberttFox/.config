@@ -245,7 +245,9 @@ function Copy-RimeFileToNewFile([string]$Source, [string]$Destination, [string]$
 
 function Write-RimeNewJson([string]$Path, $Value, [string]$Purpose = 'RIME JSON file') {
     $text = $Value | ConvertTo-Json -Depth 20
-    return Write-RimeNewTextFile $Path $text $Purpose
+    # Deliberately emit nothing: callers treat this as a side-effect writer, and a
+    # leaked return value turns their result objects into mixed arrays.
+    Write-RimeNewTextFile $Path $text $Purpose | Out-Null
 }
 
 function Read-RimeJson([string]$Path) {

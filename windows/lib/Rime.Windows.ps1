@@ -3,7 +3,13 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 function Test-RimeWindows11([string]$ProductName, [string]$BuildNumber) {
-    if ([string]::IsNullOrWhiteSpace($ProductName) -or $ProductName -notmatch '(?i)\bWindows 11\b') { return $false }
+    if ([string]::IsNullOrWhiteSpace($ProductName)) { return $false }
+    # Windows Server shares Windows 11 build numbers; reject it by name.
+    if ($ProductName -match '(?i)\bServer\b') { return $false }
+    # Microsoft never updated the registry ProductName on most Windows 11
+    # installs: it still reads "Windows 10 ...". Accept either product name and
+    # let the build number discriminate, because Windows 10 tops out at 19045.
+    if ($ProductName -notmatch '(?i)\bWindows 1[01]\b') { return $false }
     $build = 0
     if (-not [int]::TryParse($BuildNumber, [ref]$build)) { return $false }
     return $build -ge 22000
@@ -724,7 +730,9 @@ function Get-RimeMatchingServerProcesses([string]$InstallDirectory, [string]$Own
     if ($unverified -gt 0) {
         throw "Cannot inspect $unverified current-session WeaselServer process(es); refusing to proceed without verified runtime identity"
     }
-    return @($records)
+    # ToArray() rather than @(): PowerShell 7.6.6 rejects @() around a
+    # List[object] with "Argument types do not match".
+    return $records.ToArray()
 }
 
 function Get-RimeVerifiedServerProcess($Record, [string]$InstallDirectory, [string]$OwnerSid) {

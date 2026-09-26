@@ -223,7 +223,9 @@ function Get-RimeDefaultRoot([string]$ExplicitRoot, [string]$ConfigPath, [string
 }
 
 function Add-RimeMoqiStageLockIdentityParts($Parts, [string]$Name, $Entry) {
-    if ($Name -notmatch '^[a-z0-9._-]+$' -or $null -eq $Entry) {
+    # Names are plain lock source names; overlay entries are labelled with their
+    # declared position ("overlay[<n>]-<name>") so a reorder changes the identity.
+    if ($Name -notmatch '^(?:[a-z0-9._-]+|overlay\[\d+\]-[a-z0-9._-]+)$' -or $null -eq $Entry) {
         throw "Invalid Moqi stage lock entry: $Name"
     }
     foreach ($property in @('repository', 'commit', 'url', 'sha256')) {

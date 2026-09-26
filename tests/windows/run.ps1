@@ -99,20 +99,20 @@ try {
         $lock = Enter-RimeLock $temp; $lock.Dispose()
     }
     Case 'JSON temporary collision is preserved rather than deleted as owned state' {
-        $path = Join-Path $temp 'collision-state.json'
+        $jsonPath = Join-Path $temp 'collision-state.json'
         $assertFunction = (Get-Command Assert-RimePlainWriteTarget -CommandType Function).ScriptBlock
         $script:jsonCollisionPath = $null
         try {
             function Assert-RimePlainWriteTarget([string]$Path) {
                 $result = & $assertFunction $Path
-                $prefix = [IO.Path]::GetFullPath($path) + '.'
+                $prefix = [IO.Path]::GetFullPath($jsonPath) + '.'
                 if ($null -eq $script:jsonCollisionPath -and [IO.Path]::GetFullPath($Path).StartsWith($prefix, [StringComparison]::Ordinal) -and $Path.EndsWith('.tmp')) {
                     [IO.File]::WriteAllText($result, 'attacker')
                     $script:jsonCollisionPath = $result
                 }
                 return $result
             }
-            Throws { Write-RimeJson $path @{ state = 'managed' } } 'already exists|appeared'
+            Throws { Write-RimeJson $jsonPath @{ state = 'managed' } } 'already exists|appeared'
         } finally {
             Set-Item -Path Function:Assert-RimePlainWriteTarget -Value $assertFunction
         }
@@ -341,21 +341,25 @@ try {
         Assert ([IO.File]::ReadAllText($destinationPath) -eq 'attacker') 'managed file update overwrote appearing file'
     }
     Case 'managed manifest collision after initial discovery is preserved' {
-        $source = Join-Path $temp 'manifest-race-source'; $destination = Join-Path $temp 'manifest-race-destination'; $manifest = Join-Path $destination 'managed-files.json'; $sourcePath = Join-Path $source 'current.yaml'
-        [IO.Directory]::CreateDirectory($source) | Out-Null; [IO.Directory]::CreateDirectory($destination) | Out-Null
+        $source = Join-Path $temp 'manifest-race-source'; $destinationRoot = Join-Path $temp 'manifest-race-destination'; $manifest = Join-Path $destinationRoot 'managed-files.json'; $sourcePath = Join-Path $source 'current.yaml'
+        [IO.Directory]::CreateDirectory($source) | Out-Null; [IO.Directory]::CreateDirectory($destinationRoot) | Out-Null
         [IO.File]::WriteAllText($sourcePath, 'managed')
         $copyFunction = (Get-Command Copy-RimeFileToNewFile -CommandType Function).ScriptBlock
         $script:manifestCollisionInjected = $false
+        # Capture the case-scope paths: the product caller also has a $manifest,
+        # and dynamic lookup would otherwise resolve to that object.
+        $script:manifestCollisionPath = $manifest
+        $script:manifestCollisionRoot = $destinationRoot
         try {
             function Copy-RimeFileToNewFile([string]$Source, [string]$Destination, [string]$Purpose = 'RIME file copy') {
                 $result = & $copyFunction $Source $Destination $Purpose
-                if (-not $script:manifestCollisionInjected -and [IO.Path]::GetFullPath($Destination) -eq [IO.Path]::GetFullPath((Join-Path $destination 'current.yaml'))) {
-                    [IO.File]::WriteAllText($manifest, 'attacker manifest')
+                if (-not $script:manifestCollisionInjected -and [IO.Path]::GetFullPath($Destination) -eq [IO.Path]::GetFullPath((Join-Path $script:manifestCollisionRoot 'current.yaml'))) {
+                    [IO.File]::WriteAllText($script:manifestCollisionPath, 'attacker manifest')
                     $script:manifestCollisionInjected = $true
                 }
                 return $result
             }
-            Throws { Copy-RimeManagedFiles $source $destination @('current.yaml') $manifest } 'already exists|appeared'
+            Throws { Copy-RimeManagedFiles $source $destinationRoot @('current.yaml') $manifest } 'already exists|appeared'
         } finally {
             Set-Item -Path Function:Copy-RimeFileToNewFile -Value $copyFunction
         }
@@ -1332,7 +1336,7 @@ try {
     }
     Case 'archive extraction validates archive before creating cache' {
         $cache = Join-Path $temp 'extract-preflight-cache'; $missing = Join-Path $temp 'missing-extract.zip'
-        Throws { Get-RimeArchiveSourceRoot $missing $cache 'missing' } 'Could not find|cannot find|path'
+        Throws { Get-RimeArchiveSourceRoot $missing $cache 'missing' } 'missing or is not a file|Could not find|cannot find|path'
         Assert (-not (Test-Path -LiteralPath $cache)) 'missing archive created extraction cache directory'
     }
     Case 'cached stage validates source tree before creating cache' {
@@ -1401,8 +1405,12 @@ try {
         foreach ($name in $contents.Keys) {
             $path = Join-Path $sourceDirectory "$name.zip"
             New-RimeTestArchive $path $contents[$name]
-            $archives[$name] = [pscustomobject]@{ repository = "example/$name"; url = $path; sha256 = Get-RimeFileHash $path; commit = ($name[0].ToString() * 40) }
+            $archives[$name] = [pscustomobject]@{ repository = "example/$name"; url = $path; sha256 = Get-RimeFileHash $path; commit = ([string]([int][char]$name[0])).PadLeft(40, '0') }
         }
+        $archives['moqi'] | Add-Member -NotePropertyName variants -NotePropertyValue ([pscustomobject]@{
+            lite = [pscustomobject]@{ default = $true; dictionary = 'moqi_wan.lite'; schemas = @('moqi_wan_flypymo', 'moqi_single_xh'); omits = @('cn_dicts/41448') }
+            full = [pscustomobject]@{ default = $false; dictionary = 'moqi_wan.extended'; schemas = @('moqi_wan_flypymo', 'moqi_single_xh'); recipe = 'recipes/full.recipe.yaml' }
+        })
         $lock = [pscustomobject]@{ sources = [pscustomobject]$archives }
         $lite = Get-RimeSourceRootForProfile 'moqi' $false $cache $lock
         foreach ($relative in @('moqi_wan_flypymo.schema.yaml', 'cangjie5.schema.yaml', 'stroke.schema.yaml', 'luna_pinyin.schema.yaml', 'luna_quanpin.schema.yaml', 'luna_pinyin.dict.yaml', 'pinyin.yaml')) {
@@ -1545,6 +1553,10 @@ try {
             }
             Throws { Assert-RimeWindowsHost } '22000'
             function Get-RimeWindowsHostInfo {
+                return [pscustomobject]@{ Platform = [PlatformID]::Win32NT; ProductName = 'Windows 10 Pro'; BuildNumber = '26200'; Is64BitOperatingSystem = $true; Is64BitProcess = $true; PowerShellMajor = 7 }
+            }
+            Assert-RimeWindowsHost
+            function Get-RimeWindowsHostInfo {
                 return [pscustomobject]@{ Platform = [PlatformID]::Win32NT; ProductName = 'Windows Server 2025'; BuildNumber = '26100'; Is64BitOperatingSystem = $true; Is64BitProcess = $true; PowerShellMajor = 7 }
             }
             Throws { Assert-RimeWindowsHost } 'Windows 11'
@@ -1675,7 +1687,7 @@ try {
             function Get-RimeCurrentSessionId { return 1 }
             function Get-Process {
                 [CmdletBinding()]
-                param($Name, $Id, [switch]$IncludeUserName, $ErrorAction)
+                param($Name, $Id, [switch]$IncludeUserName)
                 if ($PSBoundParameters.ContainsKey('Name')) { return [pscustomobject]@{ Id = 4242; SessionId = $script:enumeratedSession } }
                 throw 'Access is denied.'
             }
@@ -1908,6 +1920,18 @@ try {
             if ($_.Exception.Message -match 'reparse') { throw }
             throw 'SKIP: managed-root symbolic-link fixture unavailable' }
     }
-} finally { [IO.Directory]::Delete($temp, $true) }
+} finally {
+    if (Test-Path -LiteralPath $temp) {
+        # .NET recursive delete aborts on a Junction in the tree with
+        # "The parameter is incorrect"; remove reparse points (deepest first)
+        # before deleting the remaining temporary directory.
+        $reparsePoints = @(Get-ChildItem -LiteralPath $temp -Force -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint })
+        foreach ($reparsePoint in ($reparsePoints | Sort-Object { $_.FullName.Length } -Descending)) {
+            Remove-Item -LiteralPath $reparsePoint.FullName -Force -ErrorAction SilentlyContinue
+        }
+        [IO.Directory]::Delete($temp, $true)
+    }
+}
 Write-Host "Tests: $script:passed passed, $script:failed failed, $script:skipped skipped"
 if ($script:failed) { exit 1 }
