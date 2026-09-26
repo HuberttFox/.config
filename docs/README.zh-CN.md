@@ -13,9 +13,12 @@ dotfiles 引导仓库的技术文档。
 | [开发](development.zh-CN.md) | 环境、验证、Bash 风格、组件编写清单 |
 | [故障排查](troubleshooting.zh-CN.md) | 常见失败、报错信息与修复 |
 | [密钥](secrets.zh-CN.md) | `.env` 约定、渲染器行为、安全规则 |
+| [Windows RIME](../windows/README.zh-CN.md) | 独立 Windows 11/PowerShell 7 x64 RIME profile、恢复/report 语义、原生验收边界 |
 
 ## 速查
 
-- 安装器：`./install.sh`（见 [README](../README.zh-CN.md)）
+- macOS 安装器：`./install.sh`（见 [README](../README.zh-CN.md)）
+- Windows RIME：Windows 11 x64 运行 `pwsh.exe -NoProfile -File .\windows\install.ps1`；`bootstrap.sh` 仅在 Windows MINGW/MSYS/Cygwin 分派。
 - 代理指南：[AGENTS.md](../AGENTS.md)
-- 沙箱测试：`./tests/integration.sh`
+- macOS 沙箱测试：`./tests/integration.sh`
+- Windows 便携测试：`pwsh -NoProfile -File .\tests\windows\run.ps1`；不等于 Windows 原生验收。

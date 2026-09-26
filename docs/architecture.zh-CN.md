@@ -134,3 +134,20 @@ flowchart LR
 常规输出报告安装计划、软件包/apply/verify 阶段、警告与事务 run ID。
 
 `--debug` 增加非敏感诊断：解析后的组件选择、tap/formula/cask 计划、组件脚本路径、Homebrew 路径、事务 ID，以及通过安装器 wrapper 执行的软件包命令。它不会启用 shell tracing、打印环境变量或 `.env` 值，也不会替代沙箱集成测试。
+
+## Windows 原生验收
+
+Windows RIME 不属于 macOS `install.sh` 流程。其便携 PowerShell 测试只覆盖纯逻辑与受控临时目录行为，**不能**认证 Windows 原生行为。发布前必须在 Windows 11 x64 上完成：
+
+1. 所有 public RIME 命令从签名有效的 PowerShell 7 x64 `pwsh.exe` 运行；验证先于真实 host 的 hostile `PATH` shadow 不会被 ACL UAC fallback 提升。
+2. 在 `HKCU\Software\Rime\Weasel\RimeUserDir` 原本存在、原本不存在两种状态下强制 profile switch 失败，验证精确 Registry restore 与 read-back；再验证强制 restore 失败写入 `recovery_required`。
+3. 在每个 Junction transaction phase 中断，验证 lock 保护的 recovery 只保留或恢复预期受管 selector。
+4. 让同一 runtime 的 Weasel server 运行于不同 SID/session；停止一个并证明另一个仍运行。验证 graceful/force stop 前 PID/path/SID/session/start-time 都重新核对。
+5. 验证 Interactive 和 Quiet deploy 均生成新鲜 schema/table/prism artifact，并覆盖 deploy failure 与 selector rollback。
+6. 验证 Moqi Lite→Full、Full→Lite、Full-only resource、Cangjie/Stroke/官方 Luna 依赖闭包，不依赖 Weasel shared data。
+7. 将 reparse-point swap 与 managed copy/delete/write/archive/profile/export/control 操作竞争；最终路径检查必须 fail closed。它不消除最后 syscall check-to-use 窗口：handle-relative no-follow API 与最终对象 identity verification 仍是独立设计/证明前的发布安全 blocker。
+8. 从真实 Raycast script directory 执行所有 wrapper，并检查 `install-report.json` 的 completed、manual_required、failed、recovery_required component state。
+9. 验证 marker 指向其他 SID 的 root 在任何 ACL grant 或 UAC elevation 之前被拒绝；验证 `windows/install.ps1` 运行期间发起的 switch 被拒绝而非继续。
+10. 验证无法检查的 `WeaselServer.exe` 被报告为错误而不是「没有 server 在运行」；验证 `MainWindowHandle` 门控的 graceful stop 与强制停止回退在无窗口 server 上的行为，以及 NTFS `Move-Item` 重命名 Junction 的语义。
+
+不得把 macOS/Linux 便携证据表述为以上任一项已通过。

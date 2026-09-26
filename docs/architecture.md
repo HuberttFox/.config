@@ -134,3 +134,45 @@ Repository configuration is limited to files consumed by retained components or 
 Normal output reports the install plan, package/apply/verify stages, warnings, and the transaction run ID.
 
 `--debug` adds non-sensitive diagnostics: resolved component selection, tap/formula/cask plan, component script path, Homebrew path, transaction ID, and package commands issued through the installer wrapper. It does not enable shell tracing, print environment variables or `.env` values, or replace the sandbox integration tests.
+
+## Native Windows acceptance
+
+Windows RIME is separate from the macOS `install.sh` pipeline. Its portable
+PowerShell tests cover pure logic and controlled temporary-directory behavior;
+they do **not** certify Windows-native behavior. Release acceptance requires a
+Windows 11 x64 machine and all of the following:
+
+1. Run every public RIME command from a signed PowerShell 7 x64 `pwsh.exe`.
+   Verify the UAC ACL fallback rejects an earlier hostile `PATH` shadow rather
+   than elevating it.
+2. Force an initial profile-switch failure with both a pre-existing and absent
+   `HKCU\Software\Rime\Weasel\RimeUserDir` property. Verify exact Registry
+   restoration and read-back; separately verify a forced restore failure is
+   persisted as `recovery_required`.
+3. Interrupt each Junction transaction phase, then verify lock-protected
+   recovery retains or restores only the expected managed selector.
+4. Run matching Weasel servers from one runtime under different SIDs/sessions;
+   stop one and prove the other remains running. Verify PID/path/SID/session/
+   start-time revalidation before graceful or forced stop.
+5. Verify Interactive and Quiet deployment produce fresh required schema/table/
+   prism artifacts; exercise deployment failure and selector rollback.
+6. Verify Moqi Lite-to-Full and Full-to-Lite behavior, Full-only resources, and
+   Cangjie/Stroke/official Luna dependency closure without Weasel shared-data
+   reliance.
+7. Race a reparse-point swap against managed copy/delete/write/archive/profile/
+   export/control operations. Final path checks must fail closed. They do not
+   eliminate the residual syscall check-to-use window: handle-relative no-follow
+   APIs plus final object identity verification remain a release security
+   blocker until separately designed and proven.
+8. Execute every Raycast wrapper from its actual configured directory and
+   inspect `install-report.json` for successful, manual-required, failed, and
+   recovery-required component states.
+9. Confirm a root whose marker names another SID is refused before any ACL grant
+   or UAC elevation, and that a switch invoked while `windows/install.ps1` runs
+   is refused instead of proceeding.
+10. Confirm runtime control reports an uninspectable `WeaselServer.exe` as an
+    error rather than as "no server running", and verify the
+    `MainWindowHandle`-gated graceful stop and the forced-stop fallback against a
+    windowless server, plus NTFS `Move-Item` Junction rename semantics.
+
+Do not report any item above as passed from macOS/Linux portable evidence.

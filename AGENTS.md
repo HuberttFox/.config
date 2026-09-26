@@ -24,15 +24,64 @@ find . -type f -name "*.sh" -exec shellcheck {} +
 
 `--dry-run` is intentionally unsupported; use the sandbox integration tests instead.
 
+## Windows RIME
+
+Windows RIME is separate from the macOS-only `install.sh` flow. It targets
+Windows 11 x64 and signed PowerShell 7 x64 (`pwsh.exe`); existing Windows
+PowerShell 5.1 profiles remain untouched and unsupported by new RIME scripts.
+
+- New Windows RIME `.ps1` files start with `#requires -Version 7.0` as line 1.
+- Daily operations must run as the marker owner SID, never `SYSTEM`, another
+  user, or a 32-bit PowerShell process.
+- Tests must never perform real Registry, UAC, ACL, Junction, Weasel installer/
+  deploy/process, DISM, WSL, scheduled-task, reboot, or input-method actions.
+- Portable tests only prove pure logic and controlled temporary-directory
+  behavior. Do not claim Windows-native Registry, ACL, Junction, Weasel,
+  cross-SID/session, reparse-race, or Raycast success without Windows 11 x64
+  acceptance evidence.
+- Reparse checks before an operation reduce but do not eliminate syscall
+  check-to-use races. Do not describe them as handle-level no-follow safety.
+
 ## Validation
 
-There is no traditional build. Installer changes must pass:
+There is no traditional build. macOS installer changes must pass:
 
 ```bash
 ./tests/integration.sh
 find . -type f -name "*.sh" -exec bash -n {} +
 find . -type f -name "*.sh" -exec shellcheck {} +  # when available
 ```
+
+Windows RIME changes additionally require PowerShell 7 when available:
+
+```bash
+pwsh -NoProfile -File tests/windows/run.ps1
+pwsh -NoProfile -Command '
+  $files = Get-ChildItem windows,tests/windows -Recurse -Filter *.ps1
+  $bad = foreach ($file in $files) {
+    $tokens = $null; $errors = $null
+    [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+    if ($errors.Count) { "$($file.FullName): $($errors | ForEach-Object Message -join \"; \")" }
+  }
+  if ($bad) { $bad; exit 1 }
+'
+./tests/bootstrap.sh
+./tests/integration.sh
+find . -type f -name "*.sh" -exec bash -n {} +
+python3 -m json.tool windows/manifests/rime.lock.json >/dev/null
+git diff --check --no-index /dev/null bootstrap.sh docs/windows-rime-plan.md \
+  tests/bootstrap.sh tests/windows/run.ps1 windows/README.md windows/README.zh-CN.md \
+  windows/install.ps1 windows/lib/Rime.Core.ps1 windows/lib/Rime.Install.ps1 \
+  windows/lib/Rime.Switch.ps1 windows/lib/Rime.Windows.ps1 \
+  windows/manifests/rime.lock.json windows/scripts/rime-switch.ps1 \
+  windows/scripts/rime-userdata.ps1 windows/raycast/Rime-Ice.bat \
+  windows/raycast/Rime-Mint.bat windows/raycast/Rime-Moqi.bat \
+  windows/raycast/Rime-Status.bat windows/raycast/Rime-Toggle.bat
+```
+
+When `pwsh` is unavailable, record its exact missing-command output. Do not
+claim the PowerShell suite or parser passed. Untracked Windows files are not
+covered by ordinary `git diff`; pass them explicitly to whitespace checking.
 
 The integration suite uses temporary `HOME` and installer state with command stubs. Tests must never invoke real Homebrew, network downloads, `sudo`, `chsh`, or application installers. Installer changes require `tests/integration.sh` coverage.
 

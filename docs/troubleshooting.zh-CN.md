@@ -81,3 +81,33 @@ Preserving user-managed file: ~/.gitconfig
 ```
 
 内容不匹配旧安装器模板的文件不会被改动。请自行检查并手动合并；安装器不覆盖未知的用户文件。
+
+## Windows RIME 拒绝 host 或 PowerShell
+
+```
+Windows 11 build 22000 or later is required
+64-bit PowerShell 7 is required
+Trusted PowerShell host signature is invalid
+```
+
+Windows RIME 与 macOS 安装器分离。仅可在 Windows 11 x64 用签名有效的 PowerShell 7 x64 `pwsh.exe` 运行：
+
+```powershell
+pwsh.exe -NoProfile -File .\windows\install.ps1
+```
+
+不要使用 Windows PowerShell 5.1 或 32 位 host。不要把另一个 `pwsh.exe` 前置到 `PATH` 来规避 untrusted-host：ACL UAC fallback 故意拒绝 PATH lookup、与 `$PSHOME` 不匹配的路径、reparse path、错误 leaf name、非 Microsoft 签名。
+
+## Windows RIME 报告 `recovery_required`
+
+profile switch 已失败，且 Registry rollback 失败或 read-back 与原 `{ Exists, Value }` snapshot 不完全一致。保留 `install-report.json`、`state.json`、`.RimeConfig.<transaction>.previous` 与当前 Registry 证据；不要手动删除/重建 selector。应在 Windows 上核对 owner SID 与预期 root 后，再执行受管 recovery/switch。
+
+## Windows RIME 的 control 或 Raycast component 失败
+
+`install-report.json` 独立记录 `runtime`、profile、`switch`、`control`、`raycast`。后续 `control`/`raycast` failure 不会删除先前成功的 profile evidence。修复 report 指出的 source/destination 或用户文件冲突后重跑；`manual_required` 表示先人工审查/复制，不能覆盖用户文件。
+
+## Windows RIME cache 或原生行为异常
+
+Moqi stage 按 lock pin、URL、SHA-256、selection pattern、dependency、stage format、Lite/Full variant 取 identity。规则变更后旧 stage 可以安全保留但不会再被使用；不要删除未知 cache path。
+
+便携测试不能诊断原生 Registry view、UAC、ACL inheritance、NTFS Junction recovery、Weasel deploy、跨 SID/session process control、reparse race 或 Raycast execution。请在 Windows 11 x64 执行[原生验收](architecture.zh-CN.md#windows-原生验收)。最终路径检查只缩小、不会消除 residual reparse syscall race。

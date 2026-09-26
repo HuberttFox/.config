@@ -4,6 +4,10 @@
 
 本仓库的环境、验证、编码风格与组件编写。
 
+## Windows RIME 边界
+
+Windows RIME 与 `install.sh` 分离。仅在 Windows 11 x64 上使用 PowerShell 7 x64，并参见 [Windows RIME](../windows/README.zh-CN.md)。便携 suite 不等于原生验收；见[Windows 原生验收](architecture.zh-CN.md#windows-原生验收)。
+
 ## 环境
 
 无传统构建，无包管理器。仓库即 `~/.config` 的线上安装本体；直接克隆到该路径即可。除 macOS 自带工具外无依赖，可选装 ShellCheck。

@@ -2,7 +2,7 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-macOS-only bootstrap repository intended to live at `~/.config`. Installer manages Homebrew packages plus repository-owned configuration for shell, terminal, and development CLI tools. See [docs](docs/) for details.
+macOS bootstrap repository intended to live at `~/.config`. `install.sh` manages Homebrew packages plus repository-owned configuration for shell, terminal, and development CLI tools. A separate Windows RIME feature lives under [`windows/`](windows/) and never runs through `install.sh`. See [docs](docs/) for details.
 
 ## Quickstart
 
@@ -28,6 +28,16 @@ macOS-only bootstrap repository intended to live at `~/.config`. Installer manag
 
 Installer runs `install packages → apply configuration → verify`, journaling every file and symlink change in a transaction. See [docs/architecture.md](docs/architecture.md) for the full pipeline and rollback semantics.
 
+## Windows RIME
+
+Windows 11 x64 users run the separate PowerShell 7 x64 RIME entrypoint:
+
+```powershell
+pwsh.exe -NoProfile -File .\windows\install.ps1
+```
+
+From Windows Git Bash/MSYS2/Cygwin, [`bootstrap.sh`](bootstrap.sh) dispatches to that entrypoint. It keeps macOS behavior by delegating to `install.sh` and rejects Linux/WSL. See the [Windows RIME guide](windows/README.md); its portable tests do not certify Windows-native Registry, ACL, Junction, Weasel, process-isolation, reparse-race, or Raycast behavior.
+
 ## Components
 
 | Group | Components |
@@ -47,6 +57,7 @@ Full per-component reference (formulae, taps, casks, apply/verify behavior): [do
 - [Development](docs/development.md) — setup, validation, bash style, component authoring
 - [Troubleshooting](docs/troubleshooting.md) — common failures and fixes
 - [Secrets](docs/secrets.md) — `.env` contract, renderer, security rules
+- [Windows RIME](windows/README.md) — separate Windows 11/PowerShell 7 x64 profile deployment and native acceptance boundary
 
 ## License
 

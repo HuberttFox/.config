@@ -4,6 +4,12 @@
 
 Setup, validation, coding style, and component authoring for this repository.
 
+## Windows RIME boundary
+
+The Windows RIME feature is separate from `install.sh`. Use PowerShell 7 x64
+on Windows 11 x64 and follow [Windows RIME](../windows/README.md). Its portable
+suite is not native acceptance; see [Native Windows acceptance](architecture.md#native-windows-acceptance).
+
 ## Setup
 
 No traditional build or package manager. The repo is the live installation at `~/.config`; clone it there. No dependencies beyond macOS tooling plus optional ShellCheck.
