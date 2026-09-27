@@ -369,7 +369,7 @@ function Get-RimeSourceRootForProfile([string]$Profile, [bool]$Full, [string]$Ca
     }
     $identityParts = Get-RimeMoqiStageIdentityParts $Lock $Full $mainPatterns $overlayDefinitions.ToArray()
     $identity = Get-RimeProfileStageIdentity $identityParts
-    return Get-RimeCachedProfileStage $main $overlayDefinitions.ToArray() $CachePath 'moqi' $identity $mainPatterns
+    return Get-RimeCachedProfileStage $main $overlayDefinitions.ToArray() $CachePath 'moqi' $identity $mainPatterns -MoqiLite:(-not $Full)
 }
 
 function Get-RimeCacheEntries([string]$Directory) {
@@ -590,13 +590,35 @@ function Get-RimeProfileStageIdentity([string[]]$Parts) {
     finally { $sha.Dispose() }
 }
 
+function Update-RimeMoqiLiteDictionaryReferences([string]$Directory) {
+    # Rime's custom patch files did not override every moqi_wan.extended
+    # reference from the included moqi.yaml on Weasel 0.17.4: the flypymo
+    # schema still failed with "dictionary 'moqi_wan.extended' failed to
+    # compile" until the staged sources themselves were rewritten. Lite
+    # therefore rewrites the staged references before the stage is cached, so
+    # managed hashes and the stage identity stay consistent.
+    $replaced = New-Object Collections.Generic.List[string]
+    foreach ($name in @('moqi_wan_flypymo.schema.yaml', 'moqi_single_xh.schema.yaml', 'moqi.yaml')) {
+        $path = Get-RimeChildPath $Directory $name
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
+        $path = Assert-RimePlainExistingFile $path "Moqi Lite source $name"
+        $text = [IO.File]::ReadAllText($path)
+        if ($text -notmatch 'moqi_wan\.extended') { continue }
+        $updated = $text -replace 'moqi_wan\.extended', 'moqi_wan.lite'
+        [IO.File]::WriteAllText($path, $updated, (New-Object Text.UTF8Encoding($false)))
+        [void]$replaced.Add($name)
+    }
+    return $replaced.ToArray()
+}
+
 function Get-RimeCachedProfileStage(
     [string]$MainSource,
     [object[]]$Overlays,
     [string]$CachePath,
     [string]$Name,
     [string]$Identity,
-    [string[]]$MainPatterns
+    [string[]]$MainPatterns,
+    [switch]$MoqiLite
 ) {
     if ($Name -notmatch '^[A-Za-z0-9._-]+$' -or $Identity -notmatch '^[A-Za-z0-9._-]+$') { throw 'Invalid profile stage identity' }
     # Validate every source tree before creating or locking the managed cache.
@@ -618,6 +640,7 @@ function Get-RimeCachedProfileStage(
         $temporaryManaged = $false
         try {
             New-RimeProfileSourceStage $MainSource $Overlays $temporary $MainPatterns | Out-Null
+            if ($MoqiLite) { [void](Update-RimeMoqiLiteDictionaryReferences $temporary) }
             Write-RimeCacheMarker $temporary 'stage' $markerIdentity
             $temporaryManaged = $true
             $temporary = Assert-RimePlainDirectoryTree $temporary 'RIME profile stage directory'

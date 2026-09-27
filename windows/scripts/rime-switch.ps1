@@ -26,13 +26,6 @@ $ErrorActionPreference = 'Stop'
 $script:ControlDirectory = $PSScriptRoot
 $script:LibraryDirectory = $PSScriptRoot
 
-function Import-RimeLibraries {
-    foreach ($name in @('Rime.Core.ps1', 'Rime.Windows.ps1', 'Rime.Switch.ps1', 'Rime.Install.ps1')) {
-        $path = Join-Path $script:LibraryDirectory $name
-        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "RIME control library missing: $path" }
-        . $path
-    }
-}
 
 function Get-RimeSwitchConfigPath {
     if (-not [string]::IsNullOrWhiteSpace($ConfigPath)) { return [IO.Path]::GetFullPath($ConfigPath) }
@@ -111,7 +104,13 @@ function Invoke-RimeSwitchCommand {
 }
 
 try {
-    Import-RimeLibraries
+    # Dot-source at script scope: libraries imported inside a function would be
+    # scoped to that function and unavailable to Invoke-RimeSwitchCommand.
+    foreach ($libraryName in @('Rime.Core.ps1', 'Rime.Windows.ps1', 'Rime.Switch.ps1', 'Rime.Install.ps1')) {
+        $libraryPath = Join-Path $script:LibraryDirectory $libraryName
+        if (-not (Test-Path -LiteralPath $libraryPath -PathType Leaf)) { throw "RIME control library missing: $libraryPath" }
+        . $libraryPath
+    }
     $result = Invoke-RimeSwitchCommand
     if ($PassThru -or $Status) { $result | ConvertTo-Json -Depth 20 }
     else { Write-Host "RIME profile switched: $($result.Profile)" }

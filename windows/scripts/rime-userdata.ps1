@@ -15,13 +15,6 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $script:LibraryDirectory = $PSScriptRoot
-function Import-RimeLibraries {
-    foreach ($name in @('Rime.Core.ps1', 'Rime.Windows.ps1', 'Rime.Switch.ps1', 'Rime.Install.ps1')) {
-        $path = Join-Path $script:LibraryDirectory $name
-        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "RIME control library missing: $path" }
-        . $path
-    }
-}
 
 function Resolve-RimeUserdataRoot([string]$ExplicitRoot) {
     $config = if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
@@ -42,7 +35,13 @@ function Resolve-RimeUserdataRoot([string]$ExplicitRoot) {
 }
 
 try {
-    Import-RimeLibraries
+    # Dot-source at script scope: libraries imported inside a function would be
+    # scoped to that function and unavailable to the export command.
+    foreach ($libraryName in @('Rime.Core.ps1', 'Rime.Windows.ps1', 'Rime.Switch.ps1', 'Rime.Install.ps1')) {
+        $libraryPath = Join-Path $script:LibraryDirectory $libraryName
+        if (-not (Test-Path -LiteralPath $libraryPath -PathType Leaf)) { throw "RIME control library missing: $libraryPath" }
+        . $libraryPath
+    }
     Assert-RimeWindowsHost
     Assert-RimePowerShell7X64 | Out-Null
     $sid = Get-RimeCurrentSid

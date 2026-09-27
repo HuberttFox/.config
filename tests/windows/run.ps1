@@ -512,6 +512,36 @@ try {
         Assert ($body -match 'WOW6432Node') 'Weasel InstallDir lookup ignores the 32-bit registry view'
         Assert ($body -match 'WeaselRoot') 'Weasel InstallDir lookup ignores the versioned WeaselRoot value'
     }
+    Case 'control scripts define libraries in script scope' {
+        $pwshCommand = Get-Command pwsh -ErrorAction SilentlyContinue
+        if ($null -eq $pwshCommand) { throw 'SKIP: pwsh unavailable' }
+        $dir = Join-Path $temp 'control-import'; [IO.Directory]::CreateDirectory($dir) | Out-Null
+        $controlRoot = Join-Path $temp 'control-import-root'; [IO.Directory]::CreateDirectory($controlRoot) | Out-Null
+        if ($IsWindows) {
+            Set-Content -LiteralPath (Join-Path $controlRoot '.config-rime-root.json') -Value (@{ format = 1; manager = 'config-rime'; ownerSid = (Get-RimeCurrentSid) } | ConvertTo-Json)
+        }
+        Copy-Item (Join-Path $repo 'windows/scripts/rime-switch.ps1') $dir
+        Copy-Item (Join-Path $repo 'windows/lib/*.ps1') $dir
+        $controlOut = & $pwshCommand.Source -NoProfile -File (Join-Path $dir 'rime-switch.ps1') -RimeRoot $controlRoot -Profile ice -NoDeploy 2>&1
+        $controlText = ($controlOut | Out-String)
+        Assert ($controlText -notmatch 'not recognized|CommandNotFoundException|Import-RimeLibraries') 'control script lost its libraries to function scope'
+    }
+    Case 'Moqi Lite rewrites staged full-dictionary references' {
+        $dir = Join-Path $temp 'moqi-lite-rewrite'; [IO.Directory]::CreateDirectory($dir) | Out-Null
+        [IO.File]::WriteAllText((Join-Path $dir 'moqi_wan_flypymo.schema.yaml'), "translator:`n  dictionary: moqi_wan.extended`n")
+        [IO.File]::WriteAllText((Join-Path $dir 'moqi.yaml'), "big_char_and_user_dict:`n  user_dict_set:`n    dictionary: moqi_wan.extended`n")
+        [IO.File]::WriteAllText((Join-Path $dir 'moqi_single_xh.schema.yaml'), "schema_id: moqi_single_xh`n")
+        $replaced = @(Update-RimeMoqiLiteDictionaryReferences $dir)
+        Assert ($replaced -contains 'moqi_wan_flypymo.schema.yaml' -and $replaced -contains 'moqi.yaml') 'Lite rewrite missed staged sources'
+        $remaining = (@(Get-ChildItem $dir -File | ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) | Out-String)
+        Assert ($remaining -notmatch 'moqi_wan\.extended') 'staged source still references moqi_wan.extended'
+    }
+    Case 'Moqi prism artifacts use dictionary-derived names' {
+        $definition = Get-RimeProfileDefinition 'moqi' $false
+        Assert ($null -ne $definition.PSObject.Properties['PrismArtifacts']) 'moqi definition has no prism artifact list'
+        Assert ((@($definition.PrismArtifacts)) -contains 'moqi_single') 'moqi prism list lost the dictionary-derived prism'
+        Assert (-not ((@($definition.PrismArtifacts)) -contains 'moqi_single_xh')) 'moqi prism list still expects the schema-derived name'
+    }
     Case 'build artifact check accepts unchanged incremental artifacts' {
         $dir = Join-Path $temp 'artifact-check'; [IO.Directory]::CreateDirectory((Join-Path $dir 'build')) | Out-Null
         $file = Join-Path $dir 'build/schema.prism.bin'; [IO.File]::WriteAllText($file, 'compiled')

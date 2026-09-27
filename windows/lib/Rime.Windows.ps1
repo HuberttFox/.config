@@ -832,10 +832,15 @@ function Invoke-RimeDeployer([string]$InstallDirectory, [string]$DeployMode, [in
     if ($process.ExitCode -ne 0) { throw "Weasel deployment failed with exit code $($process.ExitCode)" }
 }
 
+function Get-RimePrismArtifacts($Definition) {
+    if ($null -ne $Definition.PSObject.Properties['PrismArtifacts']) { return @($Definition.PrismArtifacts) }
+    return @($Definition.Schemas)
+}
+
 function Invoke-RimeDeploy([string]$InstallDirectory, [string]$ProfileDirectory, [string]$Profile, [bool]$MoqiFull, [string]$DeployMode, [int]$TimeoutSeconds, $Before, [DateTime]$StartedAt) {
     $definition = Get-RimeProfileDefinition $Profile $MoqiFull
     Invoke-RimeDeployer $InstallDirectory $DeployMode $TimeoutSeconds
-    Assert-RimeBuildArtifacts $ProfileDirectory $definition.Schemas $definition.Dictionaries $Before $StartedAt
+    Assert-RimeBuildArtifacts $ProfileDirectory (Get-RimePrismArtifacts $definition) $definition.Dictionaries $Before $StartedAt
 }
 
 function New-RimeStatusAdapter {
@@ -865,7 +870,7 @@ function New-RimeWindowsAdapter(
     $clear = ({ param($selector, $target, $transaction) Remove-RimeJunction $selector $target }).GetNewClosure()
     $stop = ({ param($unused) Stop-RimeWeasel $InstallDirectory (Get-RimeCurrentSid) }).GetNewClosure()
     $deploy = ({ param($target, $mode, $timeout, $profile, $before, $started) Invoke-RimeDeploy $InstallDirectory $target $profile $MoqiFull $mode $timeout $before $started; Start-RimeWeasel $InstallDirectory }).GetNewClosure()
-    $verify = ({ param($target, $profile, $before, $started) $definition = Get-RimeProfileDefinition $profile $MoqiFull; Assert-RimeJunction (Get-RimeSelectorPath $Root) $target | Out-Null; Assert-RimeBuildArtifacts $target $definition.Schemas $definition.Dictionaries $before $started; return $true }).GetNewClosure()
+    $verify = ({ param($target, $profile, $before, $started) $definition = Get-RimeProfileDefinition $profile $MoqiFull; Assert-RimeJunction (Get-RimeSelectorPath $Root) $target | Out-Null; Assert-RimeBuildArtifacts $target (Get-RimePrismArtifacts $definition) $definition.Dictionaries $before $started; return $true }).GetNewClosure()
     $restart = ({ param($target) Start-RimeWeasel $InstallDirectory }).GetNewClosure()
     return [pscustomobject]@{
         GetActive = $getActive

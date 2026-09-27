@@ -507,13 +507,13 @@ function Get-RimeProfileDefinition([string]$Profile, [bool]$MoqiFull) {
     switch ($Profile) {
         ice {
             return [pscustomobject]@{
-                Name = 'ice'; Schemas = @('rime_ice'); Dictionaries = @('rime_ice'); MoqiDictionary = $null
+                Name = 'ice'; Schemas = @('rime_ice'); PrismArtifacts = @('rime_ice'); Dictionaries = @('rime_ice'); MoqiDictionary = $null
                 Variant = 'standard'; Source = 'iDvel/rime-ice'
             }
         }
         mint {
             return [pscustomobject]@{
-                Name = 'mint'; Schemas = @('rime_mint_flypy'); Dictionaries = @('rime_mint'); MoqiDictionary = $null
+                Name = 'mint'; Schemas = @('rime_mint_flypy'); PrismArtifacts = @('rime_mint_flypy'); Dictionaries = @('rime_mint'); MoqiDictionary = $null
                 Variant = 'standard'; Source = 'Mintimate/oh-my-rime'
             }
         }
@@ -522,6 +522,9 @@ function Get-RimeProfileDefinition([string]$Profile, [bool]$MoqiFull) {
             $variant = if ($MoqiFull) { 'full' } else { 'lite' }
             return [pscustomobject]@{
                 Name = 'moqi'; Schemas = @('moqi_wan_flypymo', 'moqi_single_xh')
+                # moqi_single_xh has no explicit prism name, so Rime names its
+                # prism after the translator dictionary (moqi_single).
+                PrismArtifacts = @('moqi_wan_flypymo', 'moqi_single')
                 Dictionaries = @($dictionary, 'moqi_single')
                 MoqiDictionary = $dictionary; Variant = $variant
                 Source = 'gaboolic/rime-shuangpin-fuzhuma'
