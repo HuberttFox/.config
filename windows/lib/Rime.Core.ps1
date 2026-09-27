@@ -480,7 +480,13 @@ function Test-RimeBuildArtifacts(
         $file = Get-Item -LiteralPath $path -Force
         $stamp = "$($file.Length):$($file.LastWriteTimeUtc.Ticks)"
         $old = if ($Before -is [hashtable] -and $Before.ContainsKey($relative)) { $Before[$relative] } else { $null }
-        if ($file.LastWriteTimeUtc -lt $StartedAt.AddSeconds(-2) -or ($null -ne $old -and $old -eq $stamp)) { return $false }
+        # Rime deploys incrementally: an artifact this deploy left untouched is
+        # acceptable when it was already present before the deploy. Artifacts
+        # that appear or change must be fresh, which still rejects a GUI that
+        # opened without compiling a fresh profile.
+        if ($null -eq $old -or $old -ne $stamp) {
+            if ($file.LastWriteTimeUtc -lt $StartedAt.AddSeconds(-2)) { return $false }
+        }
     }
     return $true
 }

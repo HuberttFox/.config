@@ -512,6 +512,26 @@ try {
         Assert ($body -match 'WOW6432Node') 'Weasel InstallDir lookup ignores the 32-bit registry view'
         Assert ($body -match 'WeaselRoot') 'Weasel InstallDir lookup ignores the versioned WeaselRoot value'
     }
+    Case 'build artifact check accepts unchanged incremental artifacts' {
+        $dir = Join-Path $temp 'artifact-check'; [IO.Directory]::CreateDirectory((Join-Path $dir 'build')) | Out-Null
+        $file = Join-Path $dir 'build/schema.prism.bin'; [IO.File]::WriteAllText($file, 'compiled')
+        [IO.File]::SetLastWriteTimeUtc($file, (Get-Date).ToUniversalTime().AddSeconds(-30))
+        $stamp = "$((Get-Item -LiteralPath $file).Length):$((Get-Item -LiteralPath $file).LastWriteTimeUtc.Ticks)"
+        $started = [DateTime]::UtcNow
+        Assert (Test-RimeBuildArtifacts $dir @('schema') @() @{ 'build/schema.prism.bin' = $stamp } $started) 'unchanged previously deployed artifact was rejected'
+        Assert (-not (Test-RimeBuildArtifacts $dir @('schema') @() @{} $started)) 'old artifact without prior deployment was accepted'
+        [IO.File]::WriteAllText($file, 'recompiled')
+        Assert (Test-RimeBuildArtifacts $dir @('schema') @() @{ 'build/schema.prism.bin' = $stamp } $started) 'fresh artifact was rejected'
+    }
+    Case 'completed switch state clears stale failure evidence' {
+        $dir = Join-Path $temp 'state-clear'; [IO.Directory]::CreateDirectory($dir) | Out-Null
+        Write-RimeSwitchState $dir @{ status = 'failed'; error = 'old failure'; requestedProfile = 'ice' }
+        Write-RimeSwitchState $dir @{ status = 'completed'; currentProfile = 'ice' }
+        $state = Get-Content -Raw -LiteralPath (Join-Path $dir 'state.json') | ConvertFrom-Json
+        Assert ($state.status -eq 'completed') 'state status not completed'
+        Assert ($null -eq $state.PSObject.Properties['error']) 'stale error persisted after completion'
+        Assert ($state.currentProfile -eq 'ice') 'completed state lost profile'
+    }
     Case 'Weasel launch refuses a reparse install directory before Start-Process' {
         $real = Join-Path $temp 'weasel-launch-real'; $link = Join-Path $temp 'weasel-launch-link'
         [IO.Directory]::CreateDirectory($real) | Out-Null

@@ -9,6 +9,12 @@ function Write-RimeSwitchState([string]$Root, [hashtable]$Values) {
         $old = Read-RimeJson $path
         foreach ($property in $old.PSObject.Properties) { $current[$property.Name] = $property.Value }
     }
+    if ($Values.status -eq 'completed') {
+        # A completed transition supersedes any earlier failure evidence; keeping
+        # the old error text next to status completed misleads recovery tooling.
+        [void]$current.Remove('error')
+        [void]$current.Remove('recoveryError')
+    }
     foreach ($key in $Values.Keys) { $current[$key] = $Values[$key] }
     Write-RimeJson $path $current
 }
