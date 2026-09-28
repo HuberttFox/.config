@@ -2,7 +2,7 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-macOS bootstrap repository intended to live at `~/.config`. `install.sh` manages Homebrew packages plus repository-owned configuration for shell, terminal, and development CLI tools. A separate Windows RIME feature lives under [`windows/`](windows/) and never runs through `install.sh`. See [docs](docs/) for details.
+macOS bootstrap repository intended to live at `~/.config`. `install.sh` manages Homebrew packages plus repository-owned configuration for shell, terminal, and development CLI tools. Separate Windows features live under [`windows-bootstrap/`](windows-bootstrap/) (unattended Windows 11 bootstrap) and [`windows/`](windows/) (RIME profile deployment); neither runs through `install.sh`. See [docs](docs/) for details.
 
 ## Quickstart
 
@@ -28,15 +28,25 @@ macOS bootstrap repository intended to live at `~/.config`. `install.sh` manages
 
 Installer runs `install packages → apply configuration → verify`, journaling every file and symlink change in a transaction. See [docs/architecture.md](docs/architecture.md) for the full pipeline and rollback semantics.
 
-## Windows RIME
+## Windows
 
-Windows 11 x64 users run the separate PowerShell 7 x64 RIME entrypoint:
+Windows 11 x64 has two separate entrypoints, neither routed through `install.sh`:
+
+- [`windows-bootstrap/install.ps1`](windows-bootstrap/) — unattended full bootstrap: preflight, WinGet packages, WSL 2 + Ubuntu LTS, pinned JetBrains Mono Nerd Font, managed PowerShell profiles, and the RIME step, with `Run`/`Resume`/`Verify`/`Report`/`CleanupFailed`/`DryRun`. Supports Windows PowerShell 5.1 and PowerShell 7.
+
+```powershell
+pwsh.exe -NoProfile -File .\windows-bootstrap\install.ps1
+```
+
+- [`windows/install.ps1`](windows/) — PowerShell 7 x64 RIME profile deployment: three isolated profiles, fixed `RimeConfig` Junction selector, and Raycast wrappers.
 
 ```powershell
 pwsh.exe -NoProfile -File .\windows\install.ps1
 ```
 
-From Windows Git Bash/MSYS2/Cygwin, [`bootstrap.sh`](bootstrap.sh) dispatches to that entrypoint. It keeps macOS behavior by delegating to `install.sh` and rejects Linux/WSL. See the [Windows RIME guide](windows/README.md); its portable tests do not certify Windows-native Registry, ACL, Junction, Weasel, process-isolation, reparse-race, or Raycast behavior.
+From Windows Git Bash/MSYS2/Cygwin, [`bootstrap.sh`](bootstrap.sh) dispatches to the RIME entrypoint. It keeps macOS behavior by delegating to `install.sh` and rejects Linux/WSL.
+
+See the [Windows bootstrap guide](windows-bootstrap/README.md), the [Windows RIME guide](windows/README.md), and the [native acceptance evidence](docs/handoff-windows-rime-native-acceptance-evidence.md). Portable tests do not certify Windows-native Registry, ACL, Junction, Weasel, process-isolation, reparse-race, or Raycast behavior.
 
 ## Components
 
@@ -57,7 +67,9 @@ Full per-component reference (formulae, taps, casks, apply/verify behavior): [do
 - [Development](docs/development.md) — setup, validation, bash style, component authoring
 - [Troubleshooting](docs/troubleshooting.md) — common failures and fixes
 - [Secrets](docs/secrets.md) — `.env` contract, renderer, security rules
+- [Windows bootstrap](windows-bootstrap/README.md) — unattended Windows 11 entry, lifecycle state machine, and recovery semantics
 - [Windows RIME](windows/README.md) — separate Windows 11/PowerShell 7 x64 profile deployment and native acceptance boundary
+- [Native acceptance evidence](docs/handoff-windows-rime-native-acceptance-evidence.md) — what passed, is blocked, or is unverified on the disposable Windows 11 guest
 
 ## License
 

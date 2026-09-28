@@ -7,6 +7,10 @@ Weasel `0.17.4` runtime and maintains isolated Ice, Mint, and Moqi user-data
 profiles. It does **not** extend the repository's macOS/Homebrew bootstrap to
 Windows.
 
+For the broader unattended Windows bootstrap (WSL, WinGet packages, managed
+profiles, fonts), see
+[`../windows-bootstrap/README.md`](../windows-bootstrap/README.md).
+
 All Windows RIME code requires **PowerShell 7 x64** (`pwsh.exe`) on Windows
 11 x64. Existing Windows PowerShell 5.1 profiles are outside this feature,
 are never edited, and cannot run these scripts.
@@ -261,7 +265,9 @@ no-follow protection is still a Windows-native security blocker.
 A Windows 11 agent taking over native acceptance should start from
 [`../docs/handoff-windows-rime-native-acceptance.md`](../docs/handoff-windows-rime-native-acceptance.md):
 it carries the file-integrity manifest, the gate commands, the scratch-root
-protocol, and the list of claims that are still unverified.
+protocol, and the list of claims that are still unverified. Executed results
+are recorded in
+[`../docs/handoff-windows-rime-native-acceptance-evidence.md`](../docs/handoff-windows-rime-native-acceptance-evidence.md).
 
 Portable checks are safe on non-Windows hosts:
 

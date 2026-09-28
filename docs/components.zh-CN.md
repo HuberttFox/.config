@@ -44,6 +44,19 @@
 - `opencode`、`codex`、`claude-code`、`pi`：AI 编码代理 CLI，仅安装软件包并验证可用性。`opencode` 组件使用 `anomalyco/tap` 获取最新发布。认证、账户、偏好与运行时状态仍由用户管理；其配置目录（`opencode/`、`codex/`、`claude/`、`pi/`）已 gitignore。
 - `ccswitch`：仅 tap + cask + 可用性验证。不管理 CCSwitch 偏好、账户、Provider 或应用状态。
 
+## Windows bootstrap 组件
+
+`windows-bootstrap/` 由 manifest 驱动，与上方 16 个 macOS 组件相互独立。软件包分组位于 `windows-bootstrap/packages/`：
+
+| 分组 | 文件 | 内容 |
+| --- | --- | --- |
+| Base | `base.json` | Git、PowerShell 7、Windows Terminal |
+| Core | `core.json` | WSL 2 + Ubuntu LTS、JetBrains Mono Nerd Font、Mint RIME、Mint 默认输入法、PowerShell profile |
+| Fonts | `fonts.json` | 固定版本 JetBrains Mono Nerd Font（URL、SHA-256、file pattern） |
+| Optional | `optional.json` | Obsidian、Typora、Thunderbird、Telegram、Spotify、Steam、PotPlayer、CC-Switch、Clash Verge Rev、Zen Browser、Raycast、百度网盘、夸克网盘、dwall、Geek Uninstaller、欧陆词典 |
+
+每个 WinGet 项必须声明明确的 package ID 与静默参数。没有可靠静默安装或验证方式的项保持 `manual_required`；绝不模拟 GUI 操作。
+
 ## 备注
 
 - `starship` 配置仅在配置了 `zsh` 组件时生效（`zsh/prompt.zsh` 设置 `STARSHIP_CONFIG`）。

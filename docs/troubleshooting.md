@@ -82,6 +82,22 @@ Preserving user-managed file: ~/.gitconfig
 
 Files not matching old installer-generated content are left untouched. Inspect and merge manually; the installer does not overwrite unknown user files.
 
+## Windows bootstrap refuses a new run
+
+```
+Previous Windows bootstrap run is unfinished (failed); use -Resume or inspect -Report before starting a new run
+```
+
+The previous run did not finish. Inspect `-Report`, fix the reported component, then run `-Resume` or `-CleanupFailed`. A completed state also rejects a new `Run`; use `-Verify` or `-Report` instead.
+
+## Windows bootstrap lock contention
+
+`bootstrap.lock` and `install.lock` paths may remain on disk after a run. Persistence is expected: the lock is exclusive only while a handle is held, and a later run reuses the same path. If acquisition fails, wait for the other bootstrap process to exit and retry; do not delete the lock file to force progress.
+
+## Windows bootstrap failure outcomes
+
+Exit code `1` means at least one component was `failed`, `failed_uncleaned`, or `recovery_required`; later components still ran. `manual_required` is a review step, not a crash (for example a missing input-method TIP or no silent-install protocol). `-CleanupFailed` removes or restores only current-run owned, fingerprint-matching paths; unknown software, AppData, and registry entries are preserved. `-DryRun` creates no state, report, or lock files and is the only mutation-free diagnostic.
+
 ## Windows RIME rejects host or PowerShell
 
 ```
@@ -127,5 +143,7 @@ remain safely unused after a rule change; do not delete unknown cache paths.
 
 Portable tests cannot diagnose native Registry views, UAC, ACL inheritance,
 NTFS Junction recovery, Weasel deployment, cross-SID/session process control,
-reparse races, or Raycast execution. Follow [Native Windows acceptance](architecture.md#native-windows-acceptance) on a Windows 11 x64 host. Final
-path checks reduce but do not eliminate the residual reparse syscall race.
+reparse races, or Raycast execution. Follow [Native Windows acceptance](architecture.md#native-windows-acceptance) on a Windows 11 x64 host, and see
+[the acceptance evidence](handoff-windows-rime-native-acceptance-evidence.md)
+for what has been verified so far. Final path checks reduce but do not
+eliminate the residual reparse syscall race.

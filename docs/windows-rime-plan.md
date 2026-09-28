@@ -2,6 +2,8 @@
 
 Execution authority: user-approved three-profile design, direct native implementation, test first. Beads `my-brain-29h` holds progress. Committing and pushing were later authorized by the user; the macOS installer remains unchanged.
 
+Status (2026-09-28): implementation merged to `main` together with the separate `windows-bootstrap/` lifecycle. Native and lifecycle results are recorded in [`handoff-windows-rime-native-acceptance-evidence.md`](handoff-windows-rime-native-acceptance-evidence.md). Remaining blockers: live Weasel Interactive/Quiet deployment, runtime process control, cross-SID/session isolation, actual Raycast execution, current-source live concurrency, and the residual reparse race.
+
 ## Contract
 
 Windows 11 x64, signed PowerShell 7 x64 (`pwsh.exe`). Existing Windows PowerShell 5.1 profiles remain unchanged but are unsupported by new RIME scripts. One Weasel 0.17.4 runtime. Three separate profile directories under an explicitly managed root. HKCU points once to `RimeConfig`; daily switching changes only this validated Junction. Root precedence: explicit argument, JSON config, existing managed registry Junction, marked D drive location, LOCALAPPDATA. Correct initiating user SID owns state and receives Modify ACL. Never run daily switching as SYSTEM or another user.

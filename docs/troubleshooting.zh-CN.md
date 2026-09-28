@@ -82,6 +82,22 @@ Preserving user-managed file: ~/.gitconfig
 
 内容不匹配旧安装器模板的文件不会被改动。请自行检查并手动合并；安装器不覆盖未知的用户文件。
 
+## Windows bootstrap 拒绝新运行
+
+```
+Previous Windows bootstrap run is unfinished (failed); use -Resume or inspect -Report before starting a new run
+```
+
+上一次运行未完成。先运行 `-Report`，修复报告中指出的组件，然后执行 `-Resume` 或 `-CleanupFailed`。已完成的 state 同样会拒绝新的 `Run`；请改用 `-Verify` 或 `-Report`。
+
+## Windows bootstrap 锁竞争
+
+`bootstrap.lock` 与 `install.lock` 文件可能在运行结束后继续存在于磁盘上，这是预期行为：只有持有句柄期间锁才是独占的，后续运行会复用同一路径。若获取锁失败，应等待另一个 bootstrap 进程退出后重试，不要删除锁文件来强行推进。
+
+## Windows bootstrap 失败结果
+
+退出码 `1` 表示至少一个组件为 `failed`、`failed_uncleaned` 或 `recovery_required`，后续组件仍会继续执行。`manual_required` 是需要人工处理的步骤而不是崩溃（例如缺少输入法 TIP 或没有可靠静默安装协议）。`-CleanupFailed` 只清理或恢复本次运行拥有且指纹匹配的路径，未知软件、AppData 与注册表项都会保留。`-DryRun` 不创建 state、report 或 lock 文件，是唯一无变更的诊断方式。
+
 ## Windows RIME 拒绝 host 或 PowerShell
 
 ```
@@ -110,4 +126,4 @@ profile switch 已失败，且 Registry rollback 失败或 read-back 与原 `{ E
 
 Moqi stage 按 lock pin、URL、SHA-256、selection pattern、dependency、stage format、Lite/Full variant 取 identity。规则变更后旧 stage 可以安全保留但不会再被使用；不要删除未知 cache path。
 
-便携测试不能诊断原生 Registry view、UAC、ACL inheritance、NTFS Junction recovery、Weasel deploy、跨 SID/session process control、reparse race 或 Raycast execution。请在 Windows 11 x64 执行[原生验收](architecture.zh-CN.md#windows-原生验收)。最终路径检查只缩小、不会消除 residual reparse syscall race。
+便携测试不能诊断原生 Registry view、UAC、ACL inheritance、NTFS Junction recovery、Weasel deploy、跨 SID/session process control、reparse race 或 Raycast execution。请在 Windows 11 x64 执行[原生验收](architecture.zh-CN.md#windows-原生验收)，并查看[验收证据](handoff-windows-rime-native-acceptance-evidence.md)了解已有结论。最终路径检查只缩小、不会消除 residual reparse syscall race。

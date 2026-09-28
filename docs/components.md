@@ -44,6 +44,19 @@ Package-only components — no repository-managed configuration:
 - `opencode`, `codex`, `claude-code`, `pi`: AI coding agent CLIs, package + availability only. The `opencode` component uses the `anomalyco/tap` tap for up-to-date releases. Auth, accounts, preferences, and runtime state remain user-managed; their config directories (`opencode/`, `codex/`, `claude/`, `pi/`) are gitignored.
 - `ccswitch`: tap + cask + availability only. Does not manage CCSwitch preferences, accounts, providers, or application state.
 
+## Windows bootstrap components
+
+`windows-bootstrap/` is manifest-driven and separate from the 16 macOS components above. Package groups live in `windows-bootstrap/packages/`:
+
+| Group | File | Contents |
+| --- | --- | --- |
+| Base | `base.json` | Git, PowerShell 7, Windows Terminal |
+| Core | `core.json` | WSL 2 + Ubuntu LTS, JetBrains Mono Nerd Font, Mint RIME, Mint input-method default, PowerShell profiles |
+| Fonts | `fonts.json` | Pinned JetBrains Mono Nerd Font (URL, SHA-256, file pattern) |
+| Optional | `optional.json` | Obsidian, Typora, Thunderbird, Telegram, Spotify, Steam, PotPlayer, CC-Switch, Clash Verge Rev, Zen Browser, Raycast, Baidu Netdisk, Quark Netdisk, dwall, Geek Uninstaller, Eudic |
+
+Every WinGet item must declare an explicit package ID and silent arguments. Items without a reliable silent install or verification stay `manual_required`; GUI automation is never simulated.
+
 ## Notes
 
 - `starship` config activates only when the `zsh` component is configured (`zsh/prompt.zsh` sets `STARSHIP_CONFIG`).

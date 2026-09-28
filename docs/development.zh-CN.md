@@ -4,9 +4,9 @@
 
 本仓库的环境、验证、编码风格与组件编写。
 
-## Windows RIME 边界
+## Windows 边界
 
-Windows RIME 与 `install.sh` 分离。仅在 Windows 11 x64 上使用 PowerShell 7 x64，并参见 [Windows RIME](../windows/README.zh-CN.md)。便携 suite 不等于原生验收；见[Windows 原生验收](architecture.zh-CN.md#windows-原生验收)。
+Windows 功能与 `install.sh` 分离。`windows-bootstrap/` 是无人值守 Windows 11 入口，兼容 Windows PowerShell 5.1 与 PowerShell 7；`windows/` 是 PowerShell 7 x64 的 RIME 部署。参见 [Windows bootstrap](../windows-bootstrap/README.md) 与 [Windows RIME](../windows/README.zh-CN.md)。便携 suite 不等于原生验收；见 [Windows 原生验收](architecture.zh-CN.md#windows-原生验收) 与 [验收证据](handoff-windows-rime-native-acceptance-evidence.md)。
 
 ## 环境
 
@@ -25,11 +25,25 @@ find . -type f -name "*.sh" -exec bash -n {} +
 find . -type f -name "*.sh" -exec shellcheck {} +
 ```
 
+```powershell
+# Windows bootstrap 便携 suite（Windows PowerShell 5.1 或 PowerShell 7）
+pwsh -NoProfile -File .\windows-bootstrap\tests\run.ps1
+powershell.exe -NoProfile -File .\windows-bootstrap\tests\run.ps1
+
+# 无变更的 bootstrap 计划
+pwsh -NoProfile -File .\windows-bootstrap\install.ps1 -DryRun
+
+# RIME 便携 suite（PowerShell 7 x64）
+pwsh -NoProfile -File .\tests\windows\run.ps1
+```
+
 规则：
 
 - 安装器改动必须配套 `tests/integration.sh` 覆盖。
 - 测试使用临时 `HOME`/状态目录与 stub。绝不可调用真实 Homebrew、网络、`sudo`、`chsh` 或应用安装器。
 - `--dry-run` 故意不支持；请用集成测试代替。
+- `windows-bootstrap` 改动必须配套 `windows-bootstrap/tests/run.ps1` 覆盖，并保持 `-DryRun` 不产生 state/report/lock/Registry/profile/WSL/输入法变更。
+- 新增 RIME `.ps1` 文件必须声明 `#requires -Version 7.0`；`windows-bootstrap` 脚本有意声明 `#requires -Version 5.1`。
 
 ## Bash 风格
 

@@ -2,11 +2,18 @@
 
 This repository's macOS bootstrap guidance lives in [AGENTS.md](AGENTS.md).
 
-## Windows RIME contract
+## Windows contract
 
-Windows RIME is separate from macOS `install.sh`. It targets Windows 11 x64 and
-signed PowerShell 7 x64 (`pwsh.exe`); existing Windows PowerShell 5.1 profiles
-remain untouched and unsupported by new RIME scripts.
+Two Windows features are separate from macOS `install.sh`:
+
+- `windows-bootstrap/` — unattended Windows 11 x64 bootstrap; supports Windows
+  PowerShell 5.1 and PowerShell 7; scripts declare `#requires -Version 5.1`.
+  `-DryRun` stays mutation-free; component failures continue with explicit
+  outcomes (`completed`, `failed`, `failed_uncleaned`, `recovery_required`,
+  `manual_required`); cleanup touches only current-run owned paths.
+- `windows/` — RIME deployment targeting Windows 11 x64 and signed PowerShell 7
+  x64 (`pwsh.exe`); existing Windows PowerShell 5.1 profiles remain untouched
+  and unsupported by new RIME scripts.
 
 - Every new Windows RIME `.ps1` starts with `#requires -Version 7.0` on line 1.
 - Daily operations run only as managed marker-owner SID, never `SYSTEM`,
@@ -19,8 +26,9 @@ remain untouched and unsupported by new RIME scripts.
 - Final path checks narrow reparse races but do not provide handle-level
   no-follow protection. Preserve that residual Windows-native blocker.
 
-Run the Windows RIME suite and parser with PowerShell 7, then `./tests/bootstrap.sh`,
-`./tests/integration.sh`, shell syntax checks, JSON validation, and explicit
-untracked-file whitespace checks listed in [AGENTS.md](AGENTS.md). If `pwsh`
-is unavailable, record the exact failure; do not claim PowerShell tests or
-parser passed.
+Run `windows-bootstrap/tests/run.ps1` under both Windows PowerShell 5.1 and
+PowerShell 7, plus the Windows RIME suite and parser with PowerShell 7, then
+`./tests/bootstrap.sh`, `./tests/integration.sh`, shell syntax checks, JSON
+validation, and explicit untracked-file whitespace checks listed in
+[AGENTS.md](AGENTS.md). If `pwsh` is unavailable, record the exact failure; do
+not claim PowerShell tests or parser passed.

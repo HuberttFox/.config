@@ -24,11 +24,29 @@ find . -type f -name "*.sh" -exec shellcheck {} +
 
 `--dry-run` is intentionally unsupported; use the sandbox integration tests instead.
 
-## Windows RIME
+## Windows
 
-Windows RIME is separate from the macOS-only `install.sh` flow. It targets
-Windows 11 x64 and signed PowerShell 7 x64 (`pwsh.exe`); existing Windows
-PowerShell 5.1 profiles remain untouched and unsupported by new RIME scripts.
+Two Windows features are separate from the macOS-only `install.sh` flow:
+
+- `windows-bootstrap/` — unattended Windows 11 x64 bootstrap (WinGet packages,
+  WSL 2, fonts, managed profiles, RIME step). Supports Windows PowerShell 5.1
+  and PowerShell 7; its scripts declare `#requires -Version 5.1`.
+- `windows/` — RIME deployment targeting Windows 11 x64 and signed PowerShell 7
+  x64 (`pwsh.exe`); existing Windows PowerShell 5.1 profiles remain untouched
+  and unsupported by new RIME scripts.
+
+Bootstrap rules:
+
+- `-DryRun` must not create state/report/log/lock/cache files or mutate
+  Registry, profiles, WSL, input methods, or invoke installers/discovery.
+- Component failures continue the run; outcomes are explicit (`completed`,
+  `failed`, `failed_uncleaned`, `recovery_required`, `manual_required`).
+- Lock paths may remain after a run; live handle exclusivity is the contract,
+  not file deletion.
+- Cleanup may remove or restore only current-run owned, fingerprint-matching
+  paths under approved roots.
+
+RIME rules:
 
 - New Windows RIME `.ps1` files start with `#requires -Version 7.0` as line 1.
 - Daily operations must run as the marker owner SID, never `SYSTEM`, another
@@ -56,8 +74,10 @@ Windows RIME changes additionally require PowerShell 7 when available:
 
 ```bash
 pwsh -NoProfile -File tests/windows/run.ps1
+pwsh -NoProfile -File windows-bootstrap/tests/run.ps1
+powershell.exe -NoProfile -File windows-bootstrap/tests/run.ps1
 pwsh -NoProfile -Command '
-  $files = Get-ChildItem windows,tests/windows -Recurse -Filter *.ps1
+  $files = Get-ChildItem windows,windows-bootstrap,tests/windows -Recurse -Filter *.ps1
   $bad = foreach ($file in $files) {
     $tokens = $null; $errors = $null
     [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$tokens, [ref]$errors) | Out-Null
@@ -69,6 +89,7 @@ pwsh -NoProfile -Command '
 ./tests/integration.sh
 find . -type f -name "*.sh" -exec bash -n {} +
 python3 -m json.tool windows/manifests/rime.lock.json >/dev/null
+for f in windows-bootstrap/packages/*.json; do python3 -m json.tool "$f" >/dev/null; done
 git diff --check --no-index /dev/null bootstrap.sh docs/windows-rime-plan.md \
   tests/bootstrap.sh tests/windows/run.ps1 windows/README.md windows/README.zh-CN.md \
   windows/install.ps1 windows/lib/Rime.Core.ps1 windows/lib/Rime.Install.ps1 \

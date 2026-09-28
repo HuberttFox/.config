@@ -13,11 +13,14 @@ dotfiles 引导仓库的技术文档。
 | [开发](development.zh-CN.md) | 环境、验证、Bash 风格、组件编写清单 |
 | [故障排查](troubleshooting.zh-CN.md) | 常见失败、报错信息与修复 |
 | [密钥](secrets.zh-CN.md) | `.env` 约定、渲染器行为、安全规则 |
+| [Windows bootstrap](../windows-bootstrap/README.md) | 无人值守 Windows 11 入口、生命周期状态机、恢复、manifest |
 | [Windows RIME](../windows/README.zh-CN.md) | 独立 Windows 11/PowerShell 7 x64 RIME profile、恢复/report 语义、原生验收边界 |
+| [Windows 验收证据](handoff-windows-rime-native-acceptance-evidence.md) | bootstrap 与 RIME 在 disposable guest 的 PASS/BLOCKED/UNVERIFIED 记录 |
 
 ## 速查
 
 - macOS 安装器：`./install.sh`（见 [README](../README.zh-CN.md)）
+- Windows bootstrap：Windows 11 x64 运行 `pwsh.exe -NoProfile -File .\windows-bootstrap\install.ps1`（Windows PowerShell 5.1 或 PowerShell 7）；`-DryRun` 不产生任何变更。
 - Windows RIME：Windows 11 x64 运行 `pwsh.exe -NoProfile -File .\windows\install.ps1`；`bootstrap.sh` 仅在 Windows MINGW/MSYS/Cygwin 分派。
 - 代理指南：[AGENTS.md](../AGENTS.md)
 - macOS 沙箱测试：`./tests/integration.sh`

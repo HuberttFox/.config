@@ -4,6 +4,8 @@
 
 本目录为 Windows 专用 RIME 部署：安装一份标准 Weasel `0.17.4` runtime，并维护相互隔离的 Ice、Mint、Moqi 用户目录。它**不**把仓库原有 macOS/Homebrew `install.sh` 扩展到 Windows。
 
+更广泛的无人值守 Windows bootstrap（WSL、WinGet 软件包、受管 profile、字体）见 [`../windows-bootstrap/README.md`](../windows-bootstrap/README.md)。
+
 所有 Windows RIME 脚本只支持 **PowerShell 7 x64**（`pwsh.exe`）。既有 PowerShell 5.1 profile 保持不改，但不能运行这些脚本。
 
 ## 前置条件
@@ -178,7 +180,7 @@ profile 更新保留 user dictionary、generated state 与用户改过的 manage
 ## 验证边界
 
 接手 Windows 原生验收的 Windows 11 agent 请从
-[`../docs/handoff-windows-rime-native-acceptance.md`](../docs/handoff-windows-rime-native-acceptance.md) 开始：其中包含文件完整性清单、gate 命令、scratch-root 协议与仍未验证的声明列表。
+[`../docs/handoff-windows-rime-native-acceptance.md`](../docs/handoff-windows-rime-native-acceptance.md) 开始：其中包含文件完整性清单、gate 命令、scratch-root 协议与仍未验证的声明列表。已执行的结论记录在 [`../docs/handoff-windows-rime-native-acceptance-evidence.md`](../docs/handoff-windows-rime-native-acceptance-evidence.md)。
 
 便携测试可在非 Windows PowerShell 7 环境运行：
 

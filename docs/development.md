@@ -4,11 +4,15 @@
 
 Setup, validation, coding style, and component authoring for this repository.
 
-## Windows RIME boundary
+## Windows boundary
 
-The Windows RIME feature is separate from `install.sh`. Use PowerShell 7 x64
-on Windows 11 x64 and follow [Windows RIME](../windows/README.md). Its portable
-suite is not native acceptance; see [Native Windows acceptance](architecture.md#native-windows-acceptance).
+The Windows features are separate from `install.sh`. `windows-bootstrap/` is the
+unattended Windows 11 entry and supports Windows PowerShell 5.1 and PowerShell 7;
+`windows/` is the PowerShell 7 x64 RIME deployment. Follow
+[Windows bootstrap](../windows-bootstrap/README.md) and
+[Windows RIME](../windows/README.md). Portable suites are not native acceptance;
+see [Native Windows acceptance](architecture.md#native-windows-acceptance) and
+[the acceptance evidence](handoff-windows-rime-native-acceptance-evidence.md).
 
 ## Setup
 
@@ -27,11 +31,25 @@ find . -type f -name "*.sh" -exec bash -n {} +
 find . -type f -name "*.sh" -exec shellcheck {} +
 ```
 
+```powershell
+# Windows bootstrap portable suite (Windows PowerShell 5.1 or PowerShell 7)
+pwsh -NoProfile -File .\windows-bootstrap\tests\run.ps1
+powershell.exe -NoProfile -File .\windows-bootstrap\tests\run.ps1
+
+# Mutation-free bootstrap plan
+pwsh -NoProfile -File .\windows-bootstrap\install.ps1 -DryRun
+
+# RIME portable suite (PowerShell 7 x64)
+pwsh -NoProfile -File .\tests\windows\run.ps1
+```
+
 Rules:
 
 - Installer changes require `tests/integration.sh` coverage.
 - Tests use temporary `HOME`/state directories and stubs. Never call real Homebrew, network, `sudo`, `chsh`, or application installers.
 - `--dry-run` is intentionally unsupported; use the integration tests instead.
+- `windows-bootstrap` changes require `windows-bootstrap/tests/run.ps1` coverage and must keep `-DryRun` free of state/report/lock/Registry/profile/WSL/input-method mutations.
+- New RIME `.ps1` files require `#requires -Version 7.0`; `windows-bootstrap` scripts intentionally declare `#requires -Version 5.1`.
 
 ## Bash style
 

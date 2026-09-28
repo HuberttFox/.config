@@ -2,7 +2,7 @@
 
 [English](README.md) | **简体中文**
 
-macOS 引导配置仓库，应放置在 `~/.config`。`install.sh` 管理 Homebrew 软件包及 Shell、终端、开发 CLI 工具的仓库自有配置。独立的 Windows RIME 功能位于 [`windows/`](windows/)，绝不通过 `install.sh` 运行。详见 [docs/](docs/)。
+macOS 引导配置仓库，应放置在 `~/.config`。`install.sh` 管理 Homebrew 软件包及 Shell、终端、开发 CLI 工具的仓库自有配置。独立的 Windows 功能位于 [`windows-bootstrap/`](windows-bootstrap/)（无人值守 Windows 11 引导）与 [`windows/`](windows/)（RIME profile 部署），二者都绝不通过 `install.sh` 运行。详见 [docs/](docs/)。
 
 ## 快速开始
 
@@ -28,15 +28,25 @@ macOS 引导配置仓库，应放置在 `~/.config`。`install.sh` 管理 Homebr
 
 安装器按 `安装软件包 → 应用配置 → 验证` 执行，并将每次文件与符号链接变更记入事务。完整流程与回滚语义见 [docs/architecture.zh-CN.md](docs/architecture.zh-CN.md)。
 
-## Windows RIME
+## Windows
 
-Windows 11 x64 使用独立 PowerShell 7 x64 入口：
+Windows 11 x64 有两个独立入口，都不经过 `install.sh`：
+
+- [`windows-bootstrap/install.ps1`](windows-bootstrap/) — 无人值守全量引导：preflight、WinGet 软件包、WSL 2 + Ubuntu LTS、固定 JetBrains Mono Nerd Font、受管 PowerShell profile 以及 RIME 步骤；支持 `Run`/`Resume`/`Verify`/`Report`/`CleanupFailed`/`DryRun`，兼容 Windows PowerShell 5.1 与 PowerShell 7。
+
+```powershell
+pwsh.exe -NoProfile -File .\windows-bootstrap\install.ps1
+```
+
+- [`windows/install.ps1`](windows/) — PowerShell 7 x64 的 RIME profile 部署：三个隔离 profile、固定 `RimeConfig` Junction selector 与 Raycast wrapper。
 
 ```powershell
 pwsh.exe -NoProfile -File .\windows\install.ps1
 ```
 
-Windows Git Bash/MSYS2/Cygwin 可由 [`bootstrap.sh`](bootstrap.sh) 分派；macOS 仍委派给 `install.sh`，Linux/WSL 被拒绝。参见 [Windows RIME 指南](windows/README.zh-CN.md)。便携测试不认证 Windows 原生 Registry、ACL、Junction、Weasel、进程隔离、reparse race 或 Raycast。
+Windows Git Bash/MSYS2/Cygwin 可由 [`bootstrap.sh`](bootstrap.sh) 分派到 RIME 入口；macOS 仍委派给 `install.sh`，Linux/WSL 被拒绝。
+
+参见 [Windows bootstrap 指南](windows-bootstrap/README.md)、[Windows RIME 指南](windows/README.zh-CN.md) 与 [原生验收证据](docs/handoff-windows-rime-native-acceptance-evidence.md)。便携测试不认证 Windows 原生 Registry、ACL、Junction、Weasel、进程隔离、reparse race 或 Raycast。
 
 ## 组件
 
@@ -57,7 +67,9 @@ Windows Git Bash/MSYS2/Cygwin 可由 [`bootstrap.sh`](bootstrap.sh) 分派；mac
 - [开发](docs/development.zh-CN.md) — 环境、验证、Bash 风格、组件编写
 - [故障排查](docs/troubleshooting.zh-CN.md) — 常见失败与修复
 - [密钥](docs/secrets.zh-CN.md) — `.env` 约定、渲染器、安全规则
+- [Windows bootstrap](windows-bootstrap/README.md) — 无人值守 Windows 11 入口、生命周期状态机与恢复语义
 - [Windows RIME](windows/README.zh-CN.md) — 独立 Windows 11/PowerShell 7 x64 profile 部署与原生验收边界
+- [原生验收证据](docs/handoff-windows-rime-native-acceptance-evidence.md) — disposable Windows 11 guest 上的通过、阻塞与未验证项
 
 ## 许可证
 

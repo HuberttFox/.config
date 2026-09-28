@@ -135,9 +135,31 @@ flowchart LR
 
 `--debug` 增加非敏感诊断：解析后的组件选择、tap/formula/cask 计划、组件脚本路径、Homebrew 路径、事务 ID，以及通过安装器 wrapper 执行的软件包命令。它不会启用 shell tracing、打印环境变量或 `.env` 值，也不会替代沙箱集成测试。
 
+## Windows bootstrap 流程
+
+`windows-bootstrap/install.ps1` 是独立生命周期，不是 `install.sh` 的子命令。支持 Windows 11 x64 上的 Windows PowerShell 5.1 与 PowerShell 7。
+
+```mermaid
+flowchart TD
+    A[install.ps1] --> B{模式}
+    B -->|Run| C[Preflight：Windows 11 x64 + 管理员]
+    C --> D[获取 bootstrap.lock]
+    D --> E[解析 manifest：base / core / fonts / optional]
+    E --> F[执行组件；失败后继续]
+    F -->|WSL 需要重启| G[注册一次性恢复任务]
+    G --> F2[登录后 Resume]
+    F --> H[持久化 state.json + report.json]
+    H --> I[Verify / Report / CleanupFailed]
+```
+
+- 状态、报告、锁、备份与恢复任务都限定于本次运行；`-DryRun` 不创建这些文件，也不修改 Registry、profile、WSL 或输入法状态。
+- 组件结果是显式的：`completed`、`failed`、`failed_uncleaned`、`recovery_required`、`manual_required`。退出码 `1` 表示存在 failed 或 recovery_required；纯人工项运行退出 `0`。
+- Cleanup 只删除或恢复本次运行拥有且指纹匹配的路径；绝不删除未知软件、AppData 或注册表项。
+- 该生命周期的执行记录见 [验收证据](handoff-windows-rime-native-acceptance-evidence.md)。
+
 ## Windows 原生验收
 
-Windows RIME 不属于 macOS `install.sh` 流程。其便携 PowerShell 测试只覆盖纯逻辑与受控临时目录行为，**不能**认证 Windows 原生行为。发布前必须在 Windows 11 x64 上完成：
+Windows RIME 不属于 macOS `install.sh` 流程。其便携 PowerShell 测试只覆盖纯逻辑与受控临时目录行为，**不能**认证 Windows 原生行为。disposable guest 运行已验证其中一个子集（host 契约、Registry/Junction 恢复 fixture、隔离 Mint staging、生命周期失败处理）；PASS/BLOCKED/UNVERIFIED 分层见[验收证据](handoff-windows-rime-native-acceptance-evidence.md)。发布前必须在 Windows 11 x64 上完成：
 
 1. 所有 public RIME 命令从签名有效的 PowerShell 7 x64 `pwsh.exe` 运行；验证先于真实 host 的 hostile `PATH` shadow 不会被 ACL UAC fallback 提升。
 2. 在 `HKCU\Software\Rime\Weasel\RimeUserDir` 原本存在、原本不存在两种状态下强制 profile switch 失败，验证精确 Registry restore 与 read-back；再验证强制 restore 失败写入 `recovery_required`。

@@ -135,11 +135,36 @@ Normal output reports the install plan, package/apply/verify stages, warnings, a
 
 `--debug` adds non-sensitive diagnostics: resolved component selection, tap/formula/cask plan, component script path, Homebrew path, transaction ID, and package commands issued through the installer wrapper. It does not enable shell tracing, print environment variables or `.env` values, or replace the sandbox integration tests.
 
+## Windows bootstrap pipeline
+
+`windows-bootstrap/install.ps1` is an independent lifecycle, not a subcommand of `install.sh`. It supports Windows PowerShell 5.1 and PowerShell 7 on Windows 11 x64.
+
+```mermaid
+flowchart TD
+    A[install.ps1] --> B{Mode}
+    B -->|Run| C[Preflight: Windows 11 x64 + administrator]
+    C --> D[Acquire bootstrap.lock]
+    D --> E[Resolve manifests: base / core / fonts / optional]
+    E --> F[Execute components; failures continue]
+    F -->|WSL needs reboot| G[Schedule one-time resume task]
+    G --> F2[Resume after logon]
+    F --> H[Persist state.json + report.json]
+    H --> I[Verify / Report / CleanupFailed]
+```
+
+- State, report, lock, backups, and the resume task are scoped to the current run; `-DryRun` creates none of them and mutates no Registry, profile, WSL, or input-method state.
+- Component outcomes are explicit: `completed`, `failed`, `failed_uncleaned`, `recovery_required`, `manual_required`. Exit code `1` reflects failed or recovery-required components; manual-only runs exit `0`.
+- Cleanup removes or restores only current-run owned, fingerprint-matching paths; unknown software, AppData, and registry entries are never deleted.
+- The execution record for this lifecycle is in [the acceptance evidence](handoff-windows-rime-native-acceptance-evidence.md).
+
 ## Native Windows acceptance
 
 Windows RIME is separate from the macOS `install.sh` pipeline. Its portable
 PowerShell tests cover pure logic and controlled temporary-directory behavior;
-they do **not** certify Windows-native behavior. Release acceptance requires a
+they do **not** certify Windows-native behavior. A disposable-guest run has
+verified a subset (host contract, Registry/Junction recovery fixtures, isolated
+Mint staging, lifecycle failure handling); [the acceptance evidence](handoff-windows-rime-native-acceptance-evidence.md)
+records the PASS/BLOCKED/UNVERIFIED split. Release acceptance requires a
 Windows 11 x64 machine and all of the following:
 
 1. Run every public RIME command from a signed PowerShell 7 x64 `pwsh.exe`.

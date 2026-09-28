@@ -7,6 +7,14 @@ on Windows, and no PowerShell test has ever executed.
 Written: 2026-09-24. Baseline commit: `a28ac55e636d3ba666fb80b45a622089012b8cfe`
 on branch `feat/windows-rime`.
 
+> **Status (2026-09-28):** This handoff was executed on a disposable Windows 11
+> guest. Results — including PASS/BLOCKED/UNVERIFIED — are recorded in
+> [handoff-windows-rime-native-acceptance-evidence.md](handoff-windows-rime-native-acceptance-evidence.md);
+> the RIME implementation and the separate `windows-bootstrap/` lifecycle are
+> merged to `main`. The "do not commit" rule in section 2 applied only to the
+> original dirty macOS checkout and was later superseded by explicit user
+> authorization.
+
 ## 1. What you are receiving
 
 An uncommitted Windows RIME implementation: one Weasel `0.17.4` runtime, three
