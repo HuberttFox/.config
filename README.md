@@ -32,11 +32,13 @@ Installer runs `install packages → apply configuration → verify`, journaling
 
 Windows 11 x64 has two separate entrypoints, neither routed through `install.sh`:
 
-- [`windows-bootstrap/install.ps1`](windows-bootstrap/) — unattended full bootstrap: preflight, WinGet packages, WSL 2 + Ubuntu LTS, pinned JetBrains Mono Nerd Font, managed PowerShell profiles, and the RIME step, with `Run`/`Resume`/`Verify`/`Report`/`CleanupFailed`/`DryRun`. Supports Windows PowerShell 5.1 and PowerShell 7.
+- [`windows-bootstrap/install.ps1`](windows-bootstrap/) — unattended full bootstrap: preflight, WinGet packages, WSL 2 + Ubuntu LTS, pinned JetBrains Mono Nerd Font, managed PowerShell profiles, and the RIME step, with `Run`/`Resume`/`Verify`/`Report`/`CleanupFailed`/`DryRun`. Supports Windows PowerShell 5.1 and PowerShell 7. A `-ExecutionPolicy Bypass` launcher is provided as [`install.cmd`](windows-bootstrap/install.cmd).
 
 ```powershell
 pwsh.exe -NoProfile -File .\windows-bootstrap\install.ps1
 ```
+
+Or use [`windows-bootstrap/install.cmd`](windows-bootstrap/install.cmd), which starts the same script with `-ExecutionPolicy Bypass` and needs no policy change. Run it from an elevated terminal for install/resume/cleanup.
 
 - [`windows/install.ps1`](windows/) — PowerShell 7 x64 RIME profile deployment: three isolated profiles, fixed `RimeConfig` Junction selector, and Raycast wrappers.
 

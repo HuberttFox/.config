@@ -8,6 +8,22 @@
 pwsh.exe -NoProfile -File .\windows-bootstrap\install.ps1
 ```
 
+如果系统提示 `running scripts is disabled on this system`（Windows 默认执行策略 Restricted），用仓库自带的启动器，或在当前会话临时放行：
+
+```batch
+:: 免执行策略启动（安装/恢复等请在管理员终端运行）
+.\windows-bootstrap\install.cmd -DryRun
+```
+
+```powershell
+# 只在当前进程生效，不修改系统策略
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\windows-bootstrap\install.ps1 -DryRun
+
+# 或用参数直接绕过
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\windows-bootstrap\install.ps1 -DryRun
+```
+
 诊断：
 
 ```powershell

@@ -21,7 +21,7 @@ Technical documentation for the dotfiles bootstrap repository.
 ## Quick reference
 
 - macOS installer: `./install.sh` (see [README](../README.md))
-- Windows bootstrap: `pwsh.exe -NoProfile -File .\windows-bootstrap\install.ps1` on Windows 11 x64 (Windows PowerShell 5.1 or PowerShell 7); `-DryRun` is mutation-free.
+- Windows bootstrap: `pwsh.exe -NoProfile -File .\windows-bootstrap\install.ps1` on Windows 11 x64 (Windows PowerShell 5.1 or PowerShell 7); `-DryRun` is mutation-free. If scripts are disabled, use `windows-bootstrap\install.cmd`, `-ExecutionPolicy Bypass`, or `Set-ExecutionPolicy -Scope Process Bypass`.
 - Windows bootstrap packages: [windows-bootstrap-packages.md](windows-bootstrap-packages.md) — every item's WinGet ID, silent arguments, verification, and cleanup policy.
 - Windows RIME: `pwsh.exe -NoProfile -File .\windows\install.ps1` on Windows 11 x64; `bootstrap.sh` dispatches only from Windows MINGW/MSYS/Cygwin.
 - Agent guidelines: [AGENTS.md](../AGENTS.md)
