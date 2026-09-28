@@ -104,13 +104,14 @@ The old `RimeAcceptance` tree and canonical `config-rime\rime.json` were restore
 
 ### Optional-group verification (2026-09-28)
 
-A fresh `-Profile Optional` run in the same disposable guest finished with 13 `completed` components and 3 `manual_required` components (Spotify, PotPlayer, dwall); no failures. Artifacts: `evidence/final-acceptance-06/bootstrap/optional-verify/report.json`, `probe.json`, and `state.json`.
+A fresh `-Profile Optional` run in the same disposable guest finished with 14 `completed` components and 2 `manual_required` components (Spotify, PotPlayer); no failures. Artifacts: `evidence/final-acceptance-06/bootstrap/optional-verify/report.json`, `probe.json`, `state.json`, and the download-mode records `report-download-mode.json` / `state-download-mode.json`.
 
-- Installed and verified by the bootstrap: Obsidian, Typora (`appmakes.Typora`), Thunderbird, Telegram, Steam, CC-Switch, Clash Verge Rev, Zen Browser, Raycast (Microsoft Store), Baidu Netdisk, Quark Netdisk, Geek Uninstaller, and Eudic; the new base item lazygit passed the per-item probe.
+- Installed and verified by the bootstrap: Obsidian, Typora (`appmakes.Typora`), Thunderbird, Telegram, Steam, CC-Switch, Clash Verge Rev, Zen Browser, Raycast (Microsoft Store), Baidu Netdisk, Quark Netdisk, Geek Uninstaller, Eudic, and dwall; the new base item lazygit passed the per-item probe.
 - `Typora.Typora` no longer exists in the WinGet source; the manifest now pins `appmakes.Typora`.
 - `Spotify.Spotify` refuses an administrator context and the Microsoft Store package is unavailable in the guest, so Spotify is `manual_required`.
 - `Daum.PotPlayer` stalls in its interactive installer even with `--override /S`, so PotPlayer is `manual_required`.
-- The first attempt exposed an unbounded WinGet hang; `Invoke-BootstrapExternal` now enforces timeouts (900 s install, 300 s uninstall) and kills the process tree on timeout.
+- dwall uses the new `download` mode: pinned `v0.2.5` installer URL plus `sha256:c448c0d28843523f6121d9edff7d03dd74f422b83f97d0de42b3087f3a182fee`, silent `/S`, and uninstall-registry verification. The first download-mode attempt failed as `failed_uncleaned` (exit 124): under Windows PowerShell 5.1 the argument builder quoted `/S` as `"/S"`, so NSIS never entered silent mode and the installer waited in its GUI. `ConvertTo-BootstrapProcessArgument` now quotes only when required.
+- The same attempt exposed an unbounded WinGet hang; `Invoke-BootstrapExternal` enforces timeouts (900 s install, 300 s uninstall) and kills the process tree on timeout.
 - The `final-verification` step reported only the WSL gap (`manual_required`) for this Optional-only run.
 
 ## RIME Track A and native safety evidence

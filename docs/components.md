@@ -53,7 +53,7 @@ Package-only components — no repository-managed configuration:
 | Base | `base.json` | Git, lazygit, PowerShell 7, Windows Terminal |
 | Core | `core.json` | WSL 2 + Ubuntu LTS, JetBrains Mono Nerd Font, Mint RIME, Mint input-method default, PowerShell profiles |
 | Fonts | `fonts.json` | Pinned JetBrains Mono Nerd Font (URL, SHA-256, file pattern) |
-| Optional | `optional.json` | 15 WinGet/Microsoft Store items (Obsidian, Typora, Thunderbird, Telegram, Spotify, Steam, PotPlayer, CC-Switch, Clash Verge Rev, Zen Browser, Raycast, Baidu Netdisk, Quark Netdisk, Geek Uninstaller, Eudic) plus manual-only dwall |
+| Optional | `optional.json` | 13 WinGet/Microsoft Store items (Obsidian, Typora, Thunderbird, Telegram, Steam, CC-Switch, Clash Verge Rev, Zen Browser, Raycast, Baidu Netdisk, Quark Netdisk, Geek Uninstaller, Eudic), pinned-download dwall, and manual-only Spotify/PotPlayer |
 
 Every WinGet item must declare an explicit package ID and silent arguments. Items without a reliable silent install or verification stay `manual_required`; GUI automation is never simulated. Per-item reference: [Windows bootstrap packages](windows-bootstrap-packages.md).
 

@@ -89,6 +89,43 @@ try {
         Assert-Test ((Get-BootstrapWingetSource ([pscustomobject]@{ source = 'winget:Example.Package'; wingetSource = 'msstore' })) -eq 'msstore') 'explicit wingetSource override did not win'
     }
 
+    Invoke-TestCase 'manifest requires a pinned HTTPS url and sha256 for download mode' {
+        $directory = Join-Path $script:TestRoot 'bad-download'
+        New-Item -ItemType Directory -Path $directory -Force | Out-Null
+        $item = [ordered]@{
+            name = 'Broken download'
+            mode = 'download'
+            version = '1.0'
+            architecture = 'x64'
+            url = 'http://example.com/setup.exe'
+            silentInstallArgs = @('/S')
+            uninstallCommand = [ordered]@{ type = 'registry-uninstall'; args = @('/S') }
+            source = 'download:http://example.com/setup.exe'
+            checksum = 'sha256:nothex'
+            verification = [ordered]@{ type = 'uninstall-registry'; command = 'Broken App' }
+        }
+        Write-BootstrapJson (Join-Path $directory 'bad.json') ([ordered]@{ format = 1; items = @($item) })
+        $threw = $false
+        try { @(Get-BootstrapManifestItems $directory @('bad.json')) | Out-Null } catch { $threw = $true }
+        Assert-Test $threw 'download item with an insecure url and invalid checksum was accepted'
+    }
+
+    Invoke-TestCase 'uninstall command parsing handles quoted and unquoted paths' {
+        $quoted = ConvertFrom-BootstrapCommandLine '"C:\Program Files\App\uninstall.exe" /S'
+        Assert-Equal $quoted.Executable 'C:\Program Files\App\uninstall.exe' 'quoted executable parsed'
+        Assert-Test ($quoted.Arguments -contains '/S') 'quoted arguments parsed'
+        $plain = ConvertFrom-BootstrapCommandLine 'uninstall.exe /S'
+        Assert-Equal $plain.Executable 'uninstall.exe' 'plain executable parsed'
+        Assert-Test ($plain.Arguments -contains '/S') 'plain arguments parsed'
+        $empty = ConvertFrom-BootstrapCommandLine ''
+        Assert-Test ($null -eq $empty.Executable) 'empty command line should not parse an executable'
+    }
+
+    Invoke-TestCase 'download completion requires a display name' {
+        Assert-Test (-not (Test-BootstrapDownloadCompletion ([pscustomobject]@{ details = $null }))) 'missing display name should not be complete'
+        Assert-Test (-not (Test-BootstrapDownloadCompletion ([pscustomobject]@{ details = [pscustomobject]@{ displayName = '' } }))) 'empty display name should not be complete'
+    }
+
     Invoke-TestCase 'external process timeout is enforced and reported' {
         if ([Environment]::OSVersion.Platform -eq 'Win32NT') {
             $started = Get-Date
@@ -98,6 +135,13 @@ try {
             Assert-Test ($elapsed -lt 20) "timeout did not return promptly: $elapsed seconds"
             Assert-Test ($result.Output -match 'Timed out') 'timeout note missing from output'
         }
+    }
+
+    Invoke-TestCase 'process argument quoting only quotes when required' {
+        Assert-Equal (ConvertTo-BootstrapProcessArgument '/S') '/S' 'silent switch must stay unquoted'
+        Assert-Equal (ConvertTo-BootstrapProcessArgument 'Git.Git') 'Git.Git' 'plain argument must stay unquoted'
+        Assert-Equal (ConvertTo-BootstrapProcessArgument 'C:\Program Files\App') '"C:\Program Files\App"' 'argument with spaces must be quoted'
+        Assert-Equal (ConvertTo-BootstrapProcessArgument '') '""' 'empty argument must be quoted'
     }
 
     Invoke-TestCase 'Windows 11 detection accepts registry Windows 10 label by build' {

@@ -25,6 +25,7 @@ pwsh.exe -NoProfile -File .\windows-bootstrap\install.ps1 -Resume
 - 组件失败后继续，状态与报告持久化到 `%ProgramData%\WindowsBootstrap`。
 - WSL 重启通过一次性登录恢复任务续跑；完成后删除任务。
 - WinGet/msstore 只执行 manifest 中有明确 ID 的静默安装；Raycast 走 Microsoft Store 源；没有可靠静默协议的项目标记 `manual_required`，不模拟 GUI。
+- 直链项（dwall）使用固定 HTTPS URL + SHA-256 + 静默参数；安装/卸载都设超时，安装后轮询注册表确认，失败时尝试调用已注册卸载器。
 - 仅安装 JetBrains Mono Nerd Font，下载 SHA-256 固定；不安装通用字体包。
 - PowerShell 5.1/7 profile 只替换受管区块，先备份，保留用户内容。
 - 薄荷输入法通过现有 Weasel/RIME profile 配置；缺少中文语言或输入法 tip 时报告人工处理，不删除已有输入法。

@@ -23,6 +23,8 @@
 | `verification` | `{ type, ... }` 验证元数据 |
 | `wingetId` | `mode: winget` 时必填 |
 | `wingetSource` | 可选 WinGet 源覆盖：`winget`（默认）或 `msstore` |
+| `url` | `mode: download` 时必填；精确的 HTTPS 安装包直链 |
+| `installerType` | 仅元数据（`nsis`、`inno` 等）；静默参数在 `silentInstallArgs` |
 | `cleanupMode` | `winget-uninstall-if-new`、`owned-files-only`、`backup-restore` 或 `manual` |
 | `reason` | `manual` 项必填，写入报告 |
 
@@ -31,6 +33,7 @@
 - `winget` — 先 `winget list --id <id> --exact`。已安装 → `completed`，绝不改动。否则 `winget install --id <id> --exact --source <winget|msstore> <silentInstallArgs>`，再复查。源默认 `winget`；`wingetSource: msstore`（或 `source: msstore:<productId>` 前缀）选择 Microsoft Store 源，用于 Raycast。已有软件绝不卸载或升级。
 - 失败清理 — 安装失败但包已注册时，`cleanupMode: winget-uninstall-if-new` 立即卸载：卸载成功记 `failed_cleaned`，否则 `failed_uncleaned`。
 - 超时 — WinGet 安装与卸载都有上限（安装 900 秒、卸载 300 秒）。卡死的进程树会被终止并记为失败，而不是阻塞整个运行。
+- `download` — 固定直链下载。安装器按 `silentInstallArgs` 运行并设 900 秒上限，随后最多轮询 60 秒等待卸载注册表项。失败时 `cleanupMode: download-uninstall-if-new` 调用已注册卸载器；未完成项保留在失败列表里，`-CleanupFailed` 可重试。
 - `manual` — 不安装、不下载。记录为 `manual_required` 并附 `reason`，运行继续。
 - 其他模式（WSL、字体、RIME 桥接、输入法、托管 profile）由专门的 bootstrap 函数执行。
 
@@ -75,16 +78,22 @@ WinGet 项 — 相同静默参数，用 `winget list` 验证，清理 `winget-un
 | 欧路词典 | `EuSoft.Eudic` |
 | Geek Uninstaller | `GeekUninstaller.GeekUninstaller` |
 
+## 固定直链下载项 — `dwall`
+
+| 项目 | 版本 | URL | SHA-256 | 静默参数 | 验证 | 清理 |
+| --- | --- | --- | --- | --- | --- | --- |
+| dwall | 0.2.5 | `https://github.com/dwall-rs/dwall/releases/download/v0.2.5/Dwall.Settings_0.2.5_x64-setup.exe` | `sha256:c448c0d28843523f6121d9edff7d03dd74f422b83f97d0de42b3087f3a182fee` | `/S` | 卸载注册表项 `Dwall Settings` | download-uninstall-if-new |
+
 `manual_required` 项——绝不自动安装，报告逐项记录经验证的原因：
 
 | 项目 | 原因 |
 | --- | --- |
 | Spotify | WinGet 源安装器拒绝在管理员上下文运行，且测试环境无 Microsoft Store 包；请以交互用户手动安装 |
 | PotPlayer | WinGet 静默安装会挂在交互式安装器上（默认参数与 `--override /S` 均已验证） |
-| dwall | 仓库内没有稳定、经过审查的无人值守安装契约；其 GitHub release 安装包尚未实现为受管下载 |
 
 ## 修改清单
 
 - 必须补齐全部契约字段；`windows-bootstrap/tests/run.ps1` 内含清单契约回归（缺字段、不支持的架构、缺 WinGet ID）。
 - 只有当 package ID、静默安装、验证、静默卸载全部固定并通过测试后，才把 `manual` 项升级为 `winget`；仅 Microsoft Store 有货的产品使用 `wingetSource: msstore`。
+- 固定直链项必须提供 HTTPS `url`、`sha256:` 校验值、`registry-uninstall` 卸载契约与 `uninstall-registry` 验证显示名；测试覆盖契约与命令行解析。
 - 固定发布来源（如字体包）必须带精确 URL 与 SHA-256；WinGet 项依赖 WinGet 源与签名校验。

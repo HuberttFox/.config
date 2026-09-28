@@ -188,6 +188,9 @@ function Invoke-BootstrapRun {
                 'winget' {
                     Invoke-BootstrapStep $context ([string]$item.name) 'base' { Invoke-BootstrapWingetInstall $context $item $winget } | Out-Null
                 }
+                'download' {
+                    Invoke-BootstrapStep $context ([string]$item.name) 'optional' { Install-BootstrapDownloadApp $context $item } | Out-Null
+                }
                 'wsl' {
                     Invoke-BootstrapStep $context ([string]$item.name) 'core' { Install-BootstrapWsl $context $PSCommandPath -NoReboot:$NoReboot } | Out-Null
                 }

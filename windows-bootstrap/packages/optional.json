@@ -179,16 +179,17 @@
     },
     {
       "name": "dwall",
-      "mode": "manual",
-      "version": "manual-review",
+      "mode": "download",
+      "version": "0.2.5",
       "architecture": "x64",
-      "silentInstallArgs": [],
-      "uninstallCommand": {"type": "manual", "args": []},
-      "source": "manual-only",
-      "checksum": "manual-review-required",
-      "verification": {"type": "manual", "command": "", "args": [], "expected": "user confirms installation and version"},
-      "cleanupMode": "manual",
-      "reason": "No stable, reviewed unattended Windows package contract in repository."
+      "url": "https://github.com/dwall-rs/dwall/releases/download/v0.2.5/Dwall.Settings_0.2.5_x64-setup.exe",
+      "installerType": "nsis",
+      "silentInstallArgs": ["/S"],
+      "uninstallCommand": {"type": "registry-uninstall", "args": ["/S"]},
+      "source": "download:https://github.com/dwall-rs/dwall/releases/download/v0.2.5/Dwall.Settings_0.2.5_x64-setup.exe",
+      "checksum": "sha256:c448c0d28843523f6121d9edff7d03dd74f422b83f97d0de42b3087f3a182fee",
+      "verification": {"type": "uninstall-registry", "command": "Dwall Settings", "args": [], "expected": "uninstall entry present with install location"},
+      "cleanupMode": "download-uninstall-if-new"
     },
     {
       "name": "Geek Uninstaller",

@@ -23,6 +23,8 @@ Every manifest item must define the full contract below, or the installer throws
 | `verification` | `{ type, ... }` verification metadata |
 | `wingetId` | Required when `mode: winget` |
 | `wingetSource` | Optional WinGet source override: `winget` (default) or `msstore` |
+| `url` | Required for `mode: download`; exact HTTPS installer URL |
+| `installerType` | Metadata only (`nsis`, `inno`, ...); the silent switches live in `silentInstallArgs` |
 | `cleanupMode` | `winget-uninstall-if-new`, `owned-files-only`, `backup-restore`, or `manual` |
 | `reason` | Required for `manual` items; recorded in the report |
 
@@ -31,6 +33,7 @@ Mode behavior:
 - `winget` — `winget list --id <id> --exact` first. Already installed → `completed`, package left untouched. Otherwise `winget install --id <id> --exact --source <winget|msstore> <silentInstallArgs>`, then re-check with `winget list`. The source defaults to `winget`; `wingetSource: msstore` (or a `source: msstore:<productId>` prefix) selects the Microsoft Store source, used for Raycast. Existing packages are never uninstalled or upgraded.
 - Failure cleanup — when an install fails after the package became registered, `cleanupMode: winget-uninstall-if-new` removes it immediately; the component result is `failed_cleaned` if removal succeeded, otherwise `failed_uncleaned`.
 - Timeout — WinGet installs and uninstalls run under bounded timeouts (900 s install, 300 s uninstall). A stalled process tree is killed and recorded as a failure instead of blocking the run.
+- `download` — pinned direct download. The installer runs with `silentInstallArgs` under a 900 s timeout, then the component polls the uninstall registry for up to 60 s. On failure, `cleanupMode: download-uninstall-if-new` runs the registered uninstaller; an incomplete attempt is kept in the failed list so `-CleanupFailed` can retry.
 - `manual` — nothing is installed or downloaded. The item is recorded as `manual_required` with its `reason`, and the run continues.
 - Non-WinGet modes are executed by dedicated bootstrap functions (WSL, font, RIME bridge, input method, managed profiles).
 
@@ -75,16 +78,22 @@ WinGet items — same silent arguments, verify via `winget list`, cleanup `winge
 | Eudic | `EuSoft.Eudic` |
 | Geek Uninstaller | `GeekUninstaller.GeekUninstaller` |
 
+## Pinned download item — `dwall`
+
+| Item | Version | URL | SHA-256 | Silent args | Verification | Cleanup |
+| --- | --- | --- | --- | --- | --- | --- |
+| dwall | 0.2.5 | `https://github.com/dwall-rs/dwall/releases/download/v0.2.5/Dwall.Settings_0.2.5_x64-setup.exe` | `sha256:c448c0d28843523f6121d9edff7d03dd74f422b83f97d0de42b3087f3a182fee` | `/S` | uninstall-registry entry `Dwall Settings` | download-uninstall-if-new |
+
 `manual_required` items — never installed automatically; the report carries the verified reason:
 
 | Item | Reason |
 | --- | --- |
 | Spotify | The WinGet source installer refuses an administrator context and the Microsoft Store package is unavailable in the test environment; install manually as the interactive user |
 | PotPlayer | WinGet silent install stalls in the interactive installer (verified with the default switches and `--override /S`) |
-| dwall | No stable, reviewed unattended Windows package contract in the repository; its GitHub release installer is not yet a managed download |
 
 ## Changing the manifests
 
 - Add every required contract field; `windows-bootstrap/tests/run.ps1` includes manifest-contract regression coverage (missing fields, unsupported architecture, missing WinGet ID).
 - Promote a `manual` item to `winget` after its package ID, silent install, verification, and silent uninstall are all pinned and tested; use `wingetSource: msstore` for Microsoft Store-only products.
+- Direct-download items require an HTTPS `url`, a `sha256:` checksum, a `registry-uninstall` uninstall contract, and an `uninstall-registry` verification display name; the suite covers the contract and command-line parsing.
 - Pinned release sources (like the font archive) must carry an exact URL and SHA-256; WinGet items rely on the WinGet source and signature checks.

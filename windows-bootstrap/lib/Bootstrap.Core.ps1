@@ -152,6 +152,8 @@ function New-BootstrapState([string]$StateRoot, [string]$RunId, [string]$Selecte
         managedFiles = @()
         createdRegistryValues = @()
         installedPackages = @()
+        installedDownloads = @()
+        failedDownloads = @()
         cleanup = @()
         languageSnapshotBefore = $null
         executionOptions = @{}
@@ -183,7 +185,7 @@ function New-BootstrapReport([string]$StateRoot, [string]$RunId, [string]$Select
 }
 
 function Ensure-BootstrapStateShape($State) {
-    foreach ($name in @('completedComponents', 'failedComponents', 'skippedComponents', 'manualComponents', 'recoveryComponents', 'backups', 'createdPaths', 'ownedFiles', 'managedFiles', 'createdRegistryValues', 'installedPackages', 'cleanup')) {
+    foreach ($name in @('completedComponents', 'failedComponents', 'skippedComponents', 'manualComponents', 'recoveryComponents', 'backups', 'createdPaths', 'ownedFiles', 'managedFiles', 'createdRegistryValues', 'installedPackages', 'installedDownloads', 'failedDownloads', 'cleanup')) {
         $property = $State.PSObject.Properties[$name]
         if ($null -eq $property) {
             $State | Add-Member -NotePropertyName $name -NotePropertyValue @()
@@ -536,6 +538,9 @@ function Get-BootstrapPwshPath {
 
 function ConvertTo-BootstrapProcessArgument([string]$Argument) {
     if ($null -eq $Argument -or $Argument.Length -eq 0) { return '""' }
+    # Quote only when required: NSIS and other installers do not recognize
+    # switches such as "/S" when they arrive wrapped in literal quotes.
+    if ($Argument -notmatch '[\s"]') { return $Argument }
     $escaped = [regex]::Replace([string]$Argument, '(\\*)"', '$1$1\\"')
     $escaped = [regex]::Replace($escaped, '(\\+)$', '$1$1')
     return '"' + $escaped + '"'
@@ -629,7 +634,14 @@ function Get-BootstrapManifestItems([string]$ManifestDirectory, [string[]]$Files
             if ($null -eq $item.uninstallCommand.args) { throw "Package manifest item uninstallCommand has no args: $($item.name)" }
             if ($null -eq $item.verification -or $item.verification -is [string] -or [string]::IsNullOrWhiteSpace([string]$item.verification.type)) { throw "Package manifest item has no verification metadata: $($item.name)" }
             if ($item.mode -eq 'winget' -and [string]::IsNullOrWhiteSpace([string]$item.wingetId)) { throw "WinGet item has no package ID: $($item.name)" }
-            if ($null -ne $item.PSObject.Properties['wingetSource'] -and [string]$item.wingetSource -notin @('winget', 'msstore')) { throw "Unsupported WinGet source for $($item.name): $($item.wingetSource)" }
+            if ($item.mode -eq 'winget' -and $null -ne $item.PSObject.Properties['wingetSource'] -and [string]$item.wingetSource -notin @('winget', 'msstore')) { throw "Unsupported WinGet source for $($item.name): $($item.wingetSource)" }
+            if ($item.mode -eq 'download') {
+                $downloadUrl = [string](Get-BootstrapObjectProperty $item 'url')
+                if ([string]::IsNullOrWhiteSpace($downloadUrl) -or $downloadUrl -notmatch '(?i)^https://') { throw "Download item has no HTTPS url: $($item.name)" }
+                if ([string]$item.checksum -notmatch '(?i)^sha256:[0-9a-f]{64}$') { throw "Download item needs a sha256 checksum: $($item.name)" }
+                if ([string]$item.uninstallCommand.type -ne 'registry-uninstall') { throw "Download item needs a registry-uninstall contract: $($item.name)" }
+                if ([string]$item.verification.type -ne 'uninstall-registry' -or [string]::IsNullOrWhiteSpace([string]$item.verification.command)) { throw "Download item needs an uninstall-registry verification target: $($item.name)" }
+            }
             $items += $item
         }
     }
@@ -1028,6 +1040,146 @@ function Install-BootstrapFonts($Context) {
     return [pscustomobject]@{ status = 'completed'; message = "Installed/verified $($installed.Count) JetBrains Mono Nerd Font files"; details = @{ files = $installed; directory = $fontRoot } }
 }
 
+function ConvertFrom-BootstrapCommandLine([string]$CommandLine) {
+    if ([string]::IsNullOrWhiteSpace($CommandLine)) { return [pscustomobject]@{ Executable = $null; Arguments = @() } }
+    $text = $CommandLine.Trim()
+    $executable = $text
+    $rest = ''
+    if ($text.StartsWith('"')) {
+        $end = $text.IndexOf('"', 1)
+        if ($end -lt 1) { return [pscustomobject]@{ Executable = $null; Arguments = @() } }
+        $executable = $text.Substring(1, $end - 1)
+        $rest = $text.Substring($end + 1).Trim()
+    } else {
+        $space = $text.IndexOf(' ')
+        if ($space -ge 0) {
+            $executable = $text.Substring(0, $space)
+            $rest = $text.Substring($space + 1).Trim()
+        }
+    }
+    $arguments = if ([string]::IsNullOrWhiteSpace($rest)) { @() } else { @($rest -split '\s+') }
+    return [pscustomobject]@{ Executable = $executable; Arguments = $arguments }
+}
+
+function Get-BootstrapUninstallEntry([string]$DisplayName) {
+    if ([string]::IsNullOrWhiteSpace($DisplayName)) { return $null }
+    $keys = @(
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+    )
+    foreach ($item in @(Get-ItemProperty $keys -ErrorAction SilentlyContinue)) {
+        $nameProperty = $item.PSObject.Properties['DisplayName']
+        if ($null -eq $nameProperty -or [string]$nameProperty.Value -ine $DisplayName) { continue }
+        return [pscustomobject]@{
+            DisplayName = [string]$nameProperty.Value
+            DisplayVersion = [string](Get-BootstrapObjectProperty $item 'DisplayVersion')
+            Publisher = [string](Get-BootstrapObjectProperty $item 'Publisher')
+            InstallLocation = [string](Get-BootstrapObjectProperty $item 'InstallLocation')
+            UninstallString = [string](Get-BootstrapObjectProperty $item 'UninstallString')
+            QuietUninstallString = [string](Get-BootstrapObjectProperty $item 'QuietUninstallString')
+        }
+    }
+    return $null
+}
+
+function Uninstall-BootstrapDownloadedApp($Context, $Item) {
+    $displayName = [string]$Item.verification.command
+    $entry = Get-BootstrapUninstallEntry $displayName
+    if ($null -eq $entry) { return [pscustomobject]@{ status = 'absent'; message = "No uninstall entry for $displayName"; details = $null } }
+    $command = if (-not [string]::IsNullOrWhiteSpace($entry.QuietUninstallString)) { $entry.QuietUninstallString } else { $entry.UninstallString }
+    $parsed = ConvertFrom-BootstrapCommandLine $command
+    if ([string]::IsNullOrWhiteSpace($parsed.Executable) -or -not (Test-Path -LiteralPath $parsed.Executable -PathType Leaf)) {
+        return [pscustomobject]@{ status = 'failed'; message = "Uninstaller is unavailable for $displayName"; details = $entry }
+    }
+    $arguments = @($parsed.Arguments)
+    foreach ($argument in @($Item.uninstallCommand.args)) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$argument) -and -not ($arguments -contains [string]$argument)) { $arguments += [string]$argument }
+    }
+    $result = Invoke-BootstrapExternal $parsed.Executable $arguments -TimeoutSeconds 300
+    Start-Sleep -Seconds 3
+    if ($null -ne (Get-BootstrapUninstallEntry $displayName)) {
+        return [pscustomobject]@{ status = 'failed'; message = "Uninstall did not remove $displayName (exit $($result.ExitCode))"; details = @{ output = $result.Output; entry = $entry } }
+    }
+    return [pscustomobject]@{ status = 'removed'; message = "Uninstalled $displayName"; details = @{ output = $result.Output } }
+}
+
+function Test-BootstrapDownloadCompletion($Result) {
+    $details = Get-BootstrapObjectProperty $Result 'details'
+    $displayName = [string](Get-BootstrapObjectProperty $details 'displayName')
+    if ([string]::IsNullOrWhiteSpace($displayName)) { return $false }
+    return ($null -ne (Get-BootstrapUninstallEntry $displayName))
+}
+
+function Install-BootstrapDownloadApp($Context, $Item) {
+    $displayName = [string]$Item.verification.command
+    if ([string]::IsNullOrWhiteSpace($displayName)) { return [pscustomobject]@{ status = 'manual_required'; message = 'Download item has no verification display name'; details = $Item } }
+    $existing = Get-BootstrapUninstallEntry $displayName
+    if ($null -ne $existing) {
+        return [pscustomobject]@{ status = 'completed'; message = 'Already installed'; details = @{ displayName = $displayName; before = $true; installed = $false; version = $existing.DisplayVersion } }
+    }
+    if ($Context.DryRun) { return [pscustomobject]@{ status = 'skipped'; message = 'Dry run: installer download not executed'; details = @{ url = [string]$Item.url; dryRun = $true } } }
+    if ([string]$Item.checksum -notmatch '(?i)^sha256:([0-9a-f]{64})$') {
+        return [pscustomobject]@{ status = 'failed_uncleaned'; message = "Invalid checksum policy: $($Item.checksum)"; details = $Item }
+    }
+    $expected = $Matches[1].ToLowerInvariant()
+    $uri = [Uri]([string]$Item.url)
+    $folder = Join-Path (Join-Path $Context.StateRoot 'downloads') ([string]$Item.name -replace '[^A-Za-z0-9._-]', '_')
+    if (-not (Test-Path -LiteralPath $folder -PathType Container)) { New-Item -ItemType Directory -Path $folder -Force | Out-Null }
+    $file = Join-Path $folder ([IO.Path]::GetFileName($uri.AbsolutePath))
+    if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+        Invoke-WebRequest -Uri $uri.AbsoluteUri -OutFile "$file.download" -UseBasicParsing -ErrorAction Stop
+        $hash = Get-BootstrapFileSha256 "$file.download"
+        if ($hash -ne $expected) {
+            Remove-Item -LiteralPath "$file.download" -Force -ErrorAction SilentlyContinue
+            return [pscustomobject]@{ status = 'failed_uncleaned'; message = "Installer SHA-256 mismatch: $hash"; details = @{ url = $uri.AbsoluteUri; expected = $expected; actual = $hash } }
+        }
+        Move-Item -LiteralPath "$file.download" -Destination $file -Force
+    } elseif ((Get-BootstrapFileSha256 $file) -ne $expected) {
+        return [pscustomobject]@{ status = 'failed_uncleaned'; message = "Cached installer SHA-256 mismatch: $file"; details = @{ url = $uri.AbsoluteUri; expected = $expected } }
+    }
+    $arguments = @()
+    foreach ($argument in @($Item.silentInstallArgs)) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$argument)) { $arguments += [string]$argument }
+    }
+    $result = Invoke-BootstrapExternal $file $arguments -TimeoutSeconds 900
+    # Tauri/NSIS registration can land slightly after the installer process
+    # exits; poll instead of relying on a single fixed sleep.
+    $entry = $null
+    for ($attempt = 0; $attempt -lt 30; $attempt++) {
+        Start-Sleep -Seconds 2
+        $entry = Get-BootstrapUninstallEntry $displayName
+        if ($null -ne $entry) { break }
+    }
+    $details = [ordered]@{
+        displayName = $displayName
+        url = $uri.AbsoluteUri
+        sha256 = $expected
+        installer = $file
+        output = $result.Output
+        installed = ($null -ne $entry)
+    }
+    if ($null -ne $entry) {
+        $details.version = $entry.DisplayVersion
+        $details.installLocation = $entry.InstallLocation
+        $Context.State.installedDownloads = @($Context.State.installedDownloads) + [pscustomobject]@{ name = $Item.name; displayName = $displayName; at = [DateTime]::UtcNow.ToString('o') }
+        Save-BootstrapContext $Context
+        return [pscustomobject]@{ status = 'completed'; message = "Installed and verified: $($entry.DisplayVersion)"; details = [pscustomobject]$details }
+    }
+    $cleanup = 'not attempted'
+    if ([string]$Item.cleanupMode -eq 'download-uninstall-if-new') {
+        $removal = Uninstall-BootstrapDownloadedApp $Context $Item
+        $cleanup = [string]$removal.status
+        $Context.State.cleanup = @($Context.State.cleanup) + [pscustomobject]@{ name = $Item.name; action = 'download-uninstall'; status = $cleanup }
+    }
+    $status = if ($cleanup -eq 'removed') { 'failed_cleaned' } else { 'failed_uncleaned' }
+    if ($status -eq 'failed_uncleaned') {
+        $Context.State.failedDownloads = @($Context.State.failedDownloads) + [pscustomobject]@{ name = [string]$Item.name; displayName = $displayName; uninstallArgs = @($Item.uninstallCommand.args) }
+    }
+    Save-BootstrapContext $Context
+    return [pscustomobject]@{ status = $status; message = "Installer failed (exit $($result.ExitCode)); cleanup=$cleanup"; details = [pscustomobject]$details }
+}
+
 function Get-BootstrapRimeConfigCompatibility([string]$TargetRoot) {
     $configDirectory = Join-Path $env:LOCALAPPDATA 'config-rime'
     $configPath = Join-Path $configDirectory 'rime.json'
@@ -1372,6 +1524,7 @@ function Test-BootstrapComponentStillComplete($Context, $Item) {
                 return ($check.available -and $check.distro -and $check.version2)
             }
             'font' { return (Test-BootstrapFontCompletion $Context $result) }
+            'download' { return (Test-BootstrapDownloadCompletion $result) }
             'powershell-profile' { return (Test-BootstrapPowerShellProfileCompletion $Context) }
             'rime' { return (Test-BootstrapRimeCompletion $result) }
             'input-method' { return (Test-BootstrapInputMethodCompletion $result) }
@@ -1432,6 +1585,15 @@ function Invoke-BootstrapCleanup($Context) {
         } catch {
             $outcomes += [pscustomobject]@{ path = "$($entry.path)::$($entry.name)"; status = 'failed'; reason = $_.Exception.Message }
         }
+    }
+    foreach ($entry in @($Context.State.failedDownloads)) {
+        if (-not (Test-BootstrapComponentNeedsCleanup $Context ([string]$entry.name))) { continue }
+        $synthetic = [pscustomobject]@{
+            verification = [pscustomobject]@{ command = [string]$entry.displayName }
+            uninstallCommand = [pscustomobject]@{ args = @($entry.uninstallArgs) }
+        }
+        $outcome = Uninstall-BootstrapDownloadedApp $Context $synthetic
+        $outcomes += [pscustomobject]@{ path = [string]$entry.displayName; status = $outcome.status; reason = $outcome.message }
     }
     $restoredSources = @()
     $managedLatest = @{}
