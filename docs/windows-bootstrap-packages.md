@@ -93,6 +93,8 @@ No `manual` items remain. The mode stays supported for future entries that canno
 
 When `D:` is a local fixed disk (`DriveType 3`) with at least 10 GB free, items that declare `installLocation` are attempted there through WinGet `--location`; otherwise the same relative path on the system drive is used. Installers that ignore the request still install normally, and the run records `attemptedLocation` plus, when `locationProbe` matches, `actualLocation` — the report never claims a move that did not happen. Git is the pilot for this behavior.
 
+Machine scope matters: Git's Inno installer only honors `--location` when WinGet installs it with `--scope machine`, so the Git item passes that switch (verified on the disposable guest: both locations were `D:\Program Files\Git`). Other items keep their own scope defaults until each one is verified.
+
 ## Changing the manifests
 
 - Add every required contract field; `windows-bootstrap/tests/run.ps1` includes manifest-contract regression coverage (missing fields, unsupported architecture, missing WinGet ID).

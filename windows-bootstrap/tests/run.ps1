@@ -188,6 +188,8 @@ try {
         Assert-Equal ([string]$git.installLocation) 'D:\Program Files\Git' 'Git installLocation missing'
         Assert-Equal ([string]$git.locationProbe) 'cmd\git.exe' 'Git locationProbe missing'
         Assert-Equal ([string]$git.locationSupport) 'inno' 'Git locationSupport missing'
+        Assert-Test ($git.silentInstallArgs -contains '--scope') 'Git --scope missing'
+        Assert-Test ($git.silentInstallArgs -contains 'machine') 'Git machine scope value missing'
     }
 
     Invoke-TestCase 'elevated relaunch keeps the script path and bound parameters' {

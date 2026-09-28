@@ -12,7 +12,9 @@
         "--silent",
         "--accept-source-agreements",
         "--accept-package-agreements",
-        "--disable-interactivity"
+        "--disable-interactivity",
+        "--scope",
+        "machine"
       ],
       "uninstallCommand": {
         "type": "winget",
