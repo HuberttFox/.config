@@ -13,7 +13,7 @@ Every manifest item must define the full contract below, or the installer throws
 | Field | Purpose |
 | --- | --- |
 | `name` | Component name used in state and report |
-| `mode` | `winget`, `wsl`, `font`, `rime`, `input-method`, `powershell-profile`, or `manual` |
+| `mode` | `winget`, `download`, `wsl`, `font`, `rime`, `input-method`, `powershell-profile`, or `manual` |
 | `version` | Version policy (`winget-latest-stable`, a pinned release, or `manual-review`) |
 | `architecture` | `x64` or `all` |
 | `silentInstallArgs` | Array of non-interactive arguments |
@@ -26,7 +26,7 @@ Every manifest item must define the full contract below, or the installer throws
 | `url` | Required for `mode: download`; exact HTTPS installer URL |
 | `installerType` | Metadata only (`nsis`, `inno`, ...); the silent switches live in `silentInstallArgs` |
 | `installLocation` | Preferred absolute install directory (e.g. `D:\Program Files\Git`); used with WinGet `--location` when the drive policy prefers D: |
-| `locationSupport` | `inno`, `msi`, `nsis`, or `none`; `none` disables `--location` for the item |
+| `locationSupport` | `inno`, `msi`, `nsis`, `exe`, `portable`, or `none`; `none` disables `--location` for the item |
 | `locationProbe` | Relative file checked under the attempted and fallback directories to report the actual location |
 | `cleanupMode` | `winget-uninstall-if-new`, `owned-files-only`, `backup-restore`, or `manual` |
 | `reason` | Required for `manual` items; recorded in the report |
@@ -81,7 +81,23 @@ WinGet items — same silent arguments, verify via `winget list`, cleanup `winge
 | Eudic | `EuSoft.Eudic` |
 | Visual Studio Code | `Microsoft.VisualStudioCode` |
 | PyCharm Community Edition | `JetBrains.PyCharm.Community` |
+| Firefox | `Mozilla.Firefox` |
+| Microsoft Edge | `Microsoft.Edge` |
+| Google Chrome | `Google.Chrome` |
+| Python 3.14 | `Python.Python.3.14` |
+| 7-Zip | `7zip.7zip` |
+| Notepad4 | `zufuliu.notepad4` ([GitHub](https://github.com/zufuliu/notepad4)) |
+| SumatraPDF | `SumatraPDF.SumatraPDF` ([GitHub](https://github.com/sumatrapdfreader/sumatrapdf)) |
+| Quicker | `LiErHeXun.Quicker` |
+| PixPin | `PixPin.PixPin` |
 | Geek Uninstaller | `GeekUninstaller.GeekUninstaller` |
+
+## Manual items
+
+| Item | WinGet ID | Status | Reason |
+| --- | --- | --- | --- |
+| PotPlayer | `Daum.PotPlayer` | `manual_required` | The installer timed out in the guest with `/S` and override arguments; no reliable unattended contract. |
+| Spotify | `Spotify.Spotify` | `manual_required` | The WinGet installer refuses an administrator context; no usable Microsoft Store alternative was available in the guest. |
 
 ## Pinned download item — `dwall`
 
@@ -89,13 +105,13 @@ WinGet items — same silent arguments, verify via `winget list`, cleanup `winge
 | --- | --- | --- | --- | --- | --- | --- |
 | dwall | 0.2.5 | `https://github.com/dwall-rs/dwall/releases/download/v0.2.5/Dwall.Settings_0.2.5_x64-setup.exe` | `sha256:c448c0d28843523f6121d9edff7d03dd74f422b83f97d0de42b3087f3a182fee` | `/S` | uninstall-registry entry `Dwall Settings` | download-uninstall-if-new |
 
-No `manual` items remain. The mode stays supported for future entries that cannot be pinned.
+PotPlayer and Spotify remain explicit `manual_required` items: PotPlayer's current WinGet installer stalls even with `/S`, while Spotify refuses an administrator context. The mode stays supported for future entries that cannot be automated safely.
 
 ## Install location policy
 
-When `D:` is a local fixed disk (`DriveType 3`) with at least 10 GB free, items that declare `installLocation` are attempted there through WinGet `--location`; otherwise the same relative path on the system drive is used. Installers that ignore the request still install normally, and the run records `attemptedLocation` plus, when `locationProbe` matches, `actualLocation` — the report never claims a move that did not happen. Git, Visual Studio Code, and PyCharm Community Edition are the pilots for this behavior.
+When `D:` is a local fixed disk (`DriveType 3`) with at least 10 GB free, items that declare `installLocation` are attempted there through WinGet `--location`; otherwise the same relative path on the system drive is used. Installers that ignore the request still install normally, and the run records `attemptedLocation` plus, when `locationProbe` matches, `actualLocation` — the report never claims a move that did not happen. Git, Visual Studio Code, PyCharm Community Edition, Firefox, 7-Zip, Notepad4, SumatraPDF, Quicker, and PixPin are verified pilots for this behavior.
 
-Machine scope matters: these installers only honor `--location` when WinGet installs them with `--scope machine` (the default Git/VS Code user installers land per-user, and PyCharm's NSIS installer needs the machine scope for a fixed directory). All three items pass that switch and were verified on the disposable guest: `D:\Program Files\Git`, `D:\Program Files\Microsoft VS Code`, and `D:\Program Files\JetBrains\PyCharm Community Edition`. Other items keep their own scope defaults until each one is verified.
+Machine scope remains necessary for the Git, Visual Studio Code, and PyCharm installers; the other location-preference entries use their source-specific, guest-tested scope contracts. Guest verification resolved the listed pilots under `D:\Program Files\...`. Chrome ignored the requested location and Python's Burn installer rewrote it during probing, so neither declares `installLocation`; Edge remains at its Windows-managed default location.
 
 ## Changing the manifests
 

@@ -13,7 +13,7 @@
 | 字段 | 用途 |
 | --- | --- |
 | `name` | 状态与报告中使用的组件名 |
-| `mode` | `winget`、`wsl`、`font`、`rime`、`input-method`、`powershell-profile` 或 `manual` |
+| `mode` | `winget`、`download`、`wsl`、`font`、`rime`、`input-method`、`powershell-profile` 或 `manual` |
 | `version` | 版本策略（`winget-latest-stable`、固定版本或 `manual-review`） |
 | `architecture` | `x64` 或 `all` |
 | `silentInstallArgs` | 非交互参数数组 |
@@ -26,7 +26,7 @@
 | `url` | `mode: download` 时必填；精确的 HTTPS 安装包直链 |
 | `installerType` | 仅元数据（`nsis`、`inno` 等）；静默参数在 `silentInstallArgs` |
 | `installLocation` | 期望的绝对安装目录（如 `D:\Program Files\Git`）；D 盘策略命中时通过 WinGet `--location` 传递 |
-| `locationSupport` | `inno`、`msi`、`nsis` 或 `none`；`none` 表示该项不传 `--location` |
+| `locationSupport` | `inno`、`msi`、`nsis`、`exe`、`portable` 或 `none`；`none` 表示该项不传 `--location` |
 | `locationProbe` | 期望目录与回退目录下核对的实际文件，用于报告真实安装位置 |
 | `cleanupMode` | `winget-uninstall-if-new`、`owned-files-only`、`backup-restore` 或 `manual` |
 | `reason` | `manual` 项必填，写入报告 |
@@ -81,7 +81,23 @@ WinGet 项 — 相同静默参数，用 `winget list` 验证，清理 `winget-un
 | 欧路词典 | `EuSoft.Eudic` |
 | Visual Studio Code | `Microsoft.VisualStudioCode` |
 | PyCharm Community Edition | `JetBrains.PyCharm.Community` |
+| Firefox | `Mozilla.Firefox` |
+| Microsoft Edge | `Microsoft.Edge` |
+| Google Chrome | `Google.Chrome` |
+| Python 3.14 | `Python.Python.3.14` |
+| 7-Zip | `7zip.7zip` |
+| Notepad4 | `zufuliu.notepad4`（[GitHub](https://github.com/zufuliu/notepad4)） |
+| SumatraPDF | `SumatraPDF.SumatraPDF`（[GitHub](https://github.com/sumatrapdfreader/sumatrapdf)） |
+| Quicker | `LiErHeXun.Quicker` |
+| PixPin | `PixPin.PixPin` |
 | Geek Uninstaller | `GeekUninstaller.GeekUninstaller` |
+
+## Manual 项
+
+| 项目 | WinGet ID | 状态 | 原因 |
+| --- | --- | --- | --- |
+| PotPlayer | `Daum.PotPlayer` | `manual_required` | 静默安装器在 guest 中超时，`/S` 与覆盖参数均未形成可靠无人值守契约 |
+| Spotify | `Spotify.Spotify` | `manual_required` | WinGet 安装器拒绝管理员上下文；guest 中没有可用 Microsoft Store 替代 |
 
 ## 固定直链下载项 — `dwall`
 
@@ -89,13 +105,13 @@ WinGet 项 — 相同静默参数，用 `winget list` 验证，清理 `winget-un
 | --- | --- | --- | --- | --- | --- | --- |
 | dwall | 0.2.5 | `https://github.com/dwall-rs/dwall/releases/download/v0.2.5/Dwall.Settings_0.2.5_x64-setup.exe` | `sha256:c448c0d28843523f6121d9edff7d03dd74f422b83f97d0de42b3087f3a182fee` | `/S` | 卸载注册表项 `Dwall Settings` | download-uninstall-if-new |
 
-已无 `manual` 项；该模式仍保留给将来无法固定的条目。
+PotPlayer 与 Spotify 保持显式 `manual_required`：PotPlayer 当前 WinGet 安装器即使传 `/S` 仍会卡在交互安装器，Spotify 拒绝管理员上下文。该模式仍为无法安全自动化的条目保留。
 
 ## 安装位置策略
 
-当 `D:` 是本地固定磁盘（`DriveType 3`）且剩余空间不少于 10 GB 时，声明了 `installLocation` 的项会通过 WinGet `--location` 尝试装到该目录；否则使用系统盘上的同一相对路径。忽略该请求的安装器仍会正常安装，运行时记录 `attemptedLocation`，并在 `locationProbe` 命中时记录 `actualLocation`——报告不会声称未发生的迁移。Git、Visual Studio Code 与 PyCharm Community Edition 是该行为的试点。
+当 `D:` 是本地固定磁盘（`DriveType 3`）且剩余空间不少于 10 GB 时，声明了 `installLocation` 的项会通过 WinGet `--location` 尝试装到该目录；否则使用系统盘上的同一相对路径。忽略该请求的安装器仍会正常安装，运行时记录 `attemptedLocation`，并在 `locationProbe` 命中时记录 `actualLocation`——报告不会声称未发生的迁移。Git、Visual Studio Code、PyCharm Community Edition、Firefox、7-Zip、Notepad4、SumatraPDF、Quicker 与 PixPin 是已验证试点。
 
-机器级作用域很关键：这些安装器只有在 WinGet 以 `--scope machine` 安装时才会采纳 `--location`（Git/VS Code 默认装成 per-user，PyCharm 的 NSIS 安装器需要机器级 scope 才能固定目录）。三项都传递该开关，并已在 disposable guest 验证：`D:\Program Files\Git`、`D:\Program Files\Microsoft VS Code`、`D:\Program Files\JetBrains\PyCharm Community Edition`。其他项在逐项验证前保持各自的默认 scope。
+Git、Visual Studio Code、PyCharm 安装器仍需 `--scope machine`；其余声明位置偏好的项使用各自已在 guest 验证的 scope 契约。上述试点均解析到 `D:\Program Files\...`。Chrome 忽略了请求位置，Python 的 Burn 安装器在探测中改写了它，因此两项不声明 `installLocation`；Edge 保持 Windows 管理的默认位置。
 
 ## 修改清单
 

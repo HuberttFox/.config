@@ -13,10 +13,10 @@ This record separates evidence from claims. `/init` and PowerShell Direct were u
 - PowerShell 7: `7.6.6`, x64. Windows PowerShell: `5.1.26100.7920`/`5.1.26100.9549` observations during acceptance. Guest process ran elevated as `WINBOOTTEST\tester`.
 - Git, WinGet, Windows Terminal, WSL, and Weasel runtime were present in the guest fixture.
 - Current synced source hashes recorded on the guest:
-  - `windows-bootstrap/lib/Bootstrap.Core.ps1`: `D2B8C03A7519E322DA226461C63D5E1F328E293D63FACF60C3C6DC8E0981E749`
+  - `windows-bootstrap/lib/Bootstrap.Core.ps1`: `F88AF6E0C68AAC349249A47FC7A106CCF0FDA5B3D310BBAB7C9D48CB78017273`
   - `windows-bootstrap/install.ps1`: `5DC98046A2DF696154D701106D2765B4CDAC452A88C1705FB1FEC750C9DC540A`
-  - `windows-bootstrap/tests/run.ps1`: `F08279C3486452A5EB00B3647930B1D89D722F4A1527077CD08EA0A9872D3D65`
-  - `windows-bootstrap/packages/optional.json`: `017E563F2FD6E71E644B31344C26BA85D335419B492ECD732D6D0BB3AEF6DA00`
+  - `windows-bootstrap/tests/run.ps1`: `455B36DB7EA98AB61CFA2F29A92FFA3F11CA5419F095063D40437A843FCF233E`
+  - `windows-bootstrap/packages/optional.json`: `9EC7247C0E4496A17EE69F290A2409E21BB32616ADE654841EE9818BE5B9B325`
 - Font manifest SHA-256: `fab782a66f7d3019da64f6572db9fc5d3a4bcb19f9fa13e2d8a62e3693d6396e`.
 
 ## Static and portable gates
@@ -112,7 +112,7 @@ A fresh `-Profile Optional` run in the same disposable guest finished with 14 `c
 - `Spotify.Spotify` refuses an administrator context and the Microsoft Store package is unavailable in the guest; `Daum.PotPlayer` stalls in its interactive installer even with `--override /S`. Both were removed from `optional.json` after this verification instead of staying as permanent `manual_required` entries.
 - dwall uses the new `download` mode: pinned `v0.2.5` installer URL plus `sha256:c448c0d28843523f6121d9edff7d03dd74f422b83f97d0de42b3087f3a182fee`, silent `/S`, and uninstall-registry verification. The first download-mode attempt failed as `failed_uncleaned` (exit 124): under Windows PowerShell 5.1 the argument builder quoted `/S` as `"/S"`, so NSIS never entered silent mode and the installer waited in its GUI. `ConvertTo-BootstrapProcessArgument` now quotes only when required.
 - The same attempt exposed an unbounded WinGet hang; `Invoke-BootstrapExternal` enforces timeouts (900 s install, 300 s uninstall) and kills the process tree on timeout.
-- The follow-up run after Spotify and PotPlayer were removed from `optional.json` (14 items: 13 WinGet/Microsoft Store plus dwall) finished with 18 `completed` results and no `failed` or `manual_required` entries; `final-verification` completed. Artifacts: `report-optional-final.json` / `state-optional-final.json`.
+- The historical follow-up run, before later package additions and after Spotify/PotPlayer were removed from `optional.json`, used 14 items (13 WinGet/Microsoft Store plus dwall) and finished with 18 `completed` results and no `failed` or `manual_required` entries; `final-verification` completed. Artifacts: `report-optional-final.json` / `state-optional-final.json`.
 - In the earlier run, `final-verification` had reported only the WSL gap (`manual_required`) for the Optional-only scope.
 
 ### D-drive package additions (2026-09-28)
@@ -121,8 +121,19 @@ The current source was synced into the same disposable guest and exercised throu
 
 - `Microsoft.VisualStudioCode` completed with `before=false`; `attemptedLocation` and `actualLocation` both resolved to `D:\Program Files\Microsoft VS Code`; `Code.exe` was present on D: and absent on C:.
 - `JetBrains.PyCharm.Community` version `2025.2.6.1` completed with `before=false`; `attemptedLocation` and `actualLocation` both resolved to `D:\Program Files\JetBrains\PyCharm Community Edition`; `bin\pycharm64.exe` was present on D: and absent on C:.
-- The complete run reported `failed=0`, `failed_uncleaned=0`, and `manual_required=[]`. The current package set contains 15 WinGet/Microsoft Store entries plus pinned-download `dwall` in `optional.json` (16 optional entries, 25 manifest items across Base/Core/Optional).
+- That historical complete run reported `failed=0`, `failed_uncleaned=0`, and `manual_required=[]`; its package set contained 15 WinGet/Microsoft Store entries plus pinned-download `dwall` in `optional.json` (16 optional entries, 25 manifest items at that time).
 - Evidence: `bootstrap/d-drive-verify/report-vscode.json`, `bootstrap/d-drive-verify/report-pycharm.json`, and the updated `bootstrap/d-drive-verify/README.md`; bundle `SHA256SUMS` verification passed.
+
+### Requested software expansion (2026-09-28)
+
+The current source was synced into the disposable guest and run through `-Profile Optional` after the new package entries were added:
+
+- Automated entries completed without failed components: Firefox, Microsoft Edge, Google Chrome, Python 3.14, 7-Zip, Notepad4, SumatraPDF, Quicker, and PixPin.
+- D-drive probes resolved Firefox, 7-Zip, Notepad4, SumatraPDF, Quicker, and PixPin under `D:\Program Files\...`. Chrome ignored the requested location; Python's Burn installer did not expose a stable executable path at the requested location; neither declares `installLocation`. Edge remains Windows-managed.
+- PotPlayer and Spotify were recorded as `manual_required`, not attempted as unattended installs. PotPlayer timed out with `/S` and override probing; Spotify refused administrator context.
+- Guest report summary: `failed=0`, `failed_cleaned=0`, `failed_uncleaned=0`, `manual_required=[Spotify, PotPlayer]`.
+- Current manifest totals: 36 items across Base/Core/Optional; Optional contains 24 WinGet items, one pinned download (`dwall`), and two manual items.
+- Evidence: `bootstrap/new-apps-verify/report.json`, `bootstrap/new-apps-verify/evidence.json`, and `bootstrap/new-apps-verify/README.md`; bundle `SHA256SUMS` verification passed.
 
 ## RIME Track A and native safety evidence
 

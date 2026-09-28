@@ -80,7 +80,7 @@ try {
 
     Invoke-TestCase 'manifest metadata contract' {
         $items = @(Get-BootstrapManifestItems (Join-Path $script:RepoRoot 'windows-bootstrap\packages') @('base.json', 'core.json', 'optional.json'))
-        Assert-Test ($items.Count -eq 25) 'unexpected manifest item count'
+        Assert-Test ($items.Count -eq 36) 'unexpected manifest item count'
         Assert-Test (@($items | Where-Object { $_.mode -eq 'download' }).Count -gt 0) 'download item missing'
         Assert-Test (@($items | Where-Object { $_.mode -eq 'winget' -and $_.architecture -eq 'x64' }).Count -gt 0) 'x64 WinGet metadata missing'
         $font = Get-BootstrapFontManifest (Join-Path $script:RepoRoot 'windows-bootstrap')
@@ -211,6 +211,53 @@ try {
         Assert-Equal ([string]$pycharm.locationSupport) 'nsis' 'PyCharm locationSupport missing'
         Assert-Test ($pycharm.silentInstallArgs -contains '--scope') 'PyCharm --scope missing'
         Assert-Test ($pycharm.silentInstallArgs -contains 'machine') 'PyCharm machine scope value missing'
+    }
+
+    Invoke-TestCase 'requested Windows software contracts are present' {
+        $items = @(Get-BootstrapManifestItems (Join-Path $script:RepoRoot 'windows-bootstrap\packages') @('optional.json'))
+        foreach ($id in @('Mozilla.Firefox', 'Microsoft.Edge', 'Google.Chrome', 'Python.Python.3.14', '7zip.7zip', 'zufuliu.notepad4', 'SumatraPDF.SumatraPDF', 'LiErHeXun.Quicker', 'PixPin.PixPin', 'Daum.PotPlayer', 'Spotify.Spotify')) {
+            Assert-Test (@($items | Where-Object { [string](Get-BootstrapObjectProperty $_ 'wingetId') -eq $id }).Count -eq 1) "requested package missing: $id"
+        }
+        $manual = @($items | Where-Object { $_.mode -eq 'manual' })
+        Assert-Test ($manual.Count -eq 2) 'PotPlayer and Spotify should remain explicit manual items'
+        Assert-Test (@($manual | Where-Object { [string]$_.reason -match 'silent|administrator' }).Count -eq 2) 'manual reasons missing unattended-install evidence'
+    }
+
+    Invoke-TestCase 'portable and executable location metadata are accepted' {
+        $items = @(Get-BootstrapManifestItems (Join-Path $script:RepoRoot 'windows-bootstrap\packages') @('optional.json'))
+        $notepad = @($items | Where-Object { $_.name -eq 'Notepad4' })[0]
+        $sumatra = @($items | Where-Object { $_.name -eq 'SumatraPDF' })[0]
+        Assert-Equal ([string]$notepad.locationSupport) 'portable' 'Notepad4 portable locationSupport missing'
+        Assert-Equal ([string]$sumatra.locationSupport) 'exe' 'SumatraPDF executable locationSupport missing'
+        Assert-Equal ([string]$notepad.homepage) 'https://github.com/zufuliu/notepad4' 'Notepad4 upstream missing'
+        Assert-Equal ([string]$sumatra.homepage) 'https://github.com/sumatrapdfreader/sumatrapdf' 'SumatraPDF upstream missing'
+    }
+
+    Invoke-TestCase 'manual items require a reason and location type is constrained' {
+        $directory = Join-Path $script:TestRoot 'manual-contract'
+        New-Item -ItemType Directory -Path $directory -Force | Out-Null
+        $item = [ordered]@{
+            name = 'Manual package'
+            mode = 'manual'
+            version = 'manual-review'
+            architecture = 'x64'
+            silentInstallArgs = @()
+            uninstallCommand = [ordered]@{ type = 'manual'; args = @() }
+            source = 'manual:test'
+            checksum = 'manual-review'
+            verification = [ordered]@{ type = 'manual' }
+            cleanupMode = 'manual'
+        }
+        Write-BootstrapJson (Join-Path $directory 'manual.json') ([ordered]@{ format = 1; items = @($item) })
+        $missingReason = $false
+        try { @(Get-BootstrapManifestItems $directory @('manual.json')) | Out-Null } catch { $missingReason = $true }
+        Assert-Test $missingReason 'manual item without a reason was accepted'
+        $item.reason = 'Requires an interactive session'
+        $item.locationSupport = 'unknown-installer'
+        Write-BootstrapJson (Join-Path $directory 'manual.json') ([ordered]@{ format = 1; items = @($item) })
+        $unknownLocation = $false
+        try { @(Get-BootstrapManifestItems $directory @('manual.json')) | Out-Null } catch { $unknownLocation = $true }
+        Assert-Test $unknownLocation 'unsupported install location type was accepted'
     }
 
     Invoke-TestCase 'elevated relaunch keeps the script path and bound parameters' {

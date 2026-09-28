@@ -793,6 +793,9 @@ function Get-BootstrapManifestItems([string]$ManifestDirectory, [string[]]$Files
             if ($null -eq $item.verification -or $item.verification -is [string] -or [string]::IsNullOrWhiteSpace([string]$item.verification.type)) { throw "Package manifest item has no verification metadata: $($item.name)" }
             if ($item.mode -eq 'winget' -and [string]::IsNullOrWhiteSpace([string]$item.wingetId)) { throw "WinGet item has no package ID: $($item.name)" }
             if ($item.mode -eq 'winget' -and $null -ne $item.PSObject.Properties['wingetSource'] -and [string]$item.wingetSource -notin @('winget', 'msstore')) { throw "Unsupported WinGet source for $($item.name): $($item.wingetSource)" }
+            if ($item.mode -eq 'manual' -and [string]::IsNullOrWhiteSpace([string](Get-BootstrapObjectProperty $item 'reason'))) { throw "Manual item has no reason: $($item.name)" }
+            $locationSupport = [string](Get-BootstrapObjectProperty $item 'locationSupport')
+            if (-not [string]::IsNullOrWhiteSpace($locationSupport) -and $locationSupport -notin @('inno', 'msi', 'nsis', 'exe', 'portable', 'none')) { throw "Unsupported install location type for $($item.name): $locationSupport" }
             if ($item.mode -eq 'download') {
                 $downloadUrl = [string](Get-BootstrapObjectProperty $item 'url')
                 if ([string]::IsNullOrWhiteSpace($downloadUrl) -or $downloadUrl -notmatch '(?i)^https://') { throw "Download item has no HTTPS url: $($item.name)" }
