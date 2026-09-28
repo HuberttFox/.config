@@ -14,6 +14,7 @@ Technical documentation for the dotfiles bootstrap repository.
 | [Troubleshooting](troubleshooting.md) | Common failures, error messages, and fixes |
 | [Secrets](secrets.md) | `.env` contract, renderer behavior, security rules |
 | [Windows bootstrap](../windows-bootstrap/README.md) | Unattended Windows 11 entry, lifecycle state machine, recovery, manifests |
+| [Windows bootstrap packages](windows-bootstrap-packages.md) | Per-item reference for `windows-bootstrap/packages/*.json`: WinGet IDs, silent args, verification, manual-required reasons |
 | [Windows RIME](../windows/README.md) | Separate Windows 11/PowerShell 7 x64 RIME profiles, recovery/report semantics, and native acceptance boundary |
 | [Windows acceptance evidence](handoff-windows-rime-native-acceptance-evidence.md) | Disposable-guest PASS/BLOCKED/UNVERIFIED record for bootstrap and RIME |
 
@@ -21,6 +22,7 @@ Technical documentation for the dotfiles bootstrap repository.
 
 - macOS installer: `./install.sh` (see [README](../README.md))
 - Windows bootstrap: `pwsh.exe -NoProfile -File .\windows-bootstrap\install.ps1` on Windows 11 x64 (Windows PowerShell 5.1 or PowerShell 7); `-DryRun` is mutation-free.
+- Windows bootstrap packages: [windows-bootstrap-packages.md](windows-bootstrap-packages.md) — every item's WinGet ID, silent arguments, verification, and cleanup policy.
 - Windows RIME: `pwsh.exe -NoProfile -File .\windows\install.ps1` on Windows 11 x64; `bootstrap.sh` dispatches only from Windows MINGW/MSYS/Cygwin.
 - Agent guidelines: [AGENTS.md](../AGENTS.md)
 - macOS sandbox tests: `./tests/integration.sh`

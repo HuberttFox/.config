@@ -1,0 +1,87 @@
+# Windows Bootstrap 软件清单参考
+
+[English](windows-bootstrap-packages.md) | **简体中文**
+
+本文档逐项解释 [`windows-bootstrap/install.ps1`](../windows-bootstrap/install.ps1) 消费的软件清单。[`windows-bootstrap/packages/`](../windows-bootstrap/packages/) 下的 JSON 是唯一真源，本页说明每一项装什么、怎么验证。
+
+运行顺序与分组：`Base` → `Core` → `Optional`。`-Profile Base|Core|Optional|All` 选择子集；`-NoOptional` 从 `All` 中去掉可选组。
+
+## 执行模型
+
+清单项必须满足完整契约，否则安装器在运行任何组件前直接报错：
+
+| 字段 | 用途 |
+| --- | --- |
+| `name` | 状态与报告中使用的组件名 |
+| `mode` | `winget`、`wsl`、`font`、`rime`、`input-method`、`powershell-profile` 或 `manual` |
+| `version` | 版本策略（`winget-latest-stable`、固定版本或 `manual-review`） |
+| `architecture` | `x64` 或 `all` |
+| `silentInstallArgs` | 非交互参数数组 |
+| `uninstallCommand` | `{ type, args }`；卸载时替换 `{wingetId}` |
+| `source` | 软件来源 |
+| `checksum` | 完整性/验证策略 |
+| `verification` | `{ type, ... }` 验证元数据 |
+| `wingetId` | `mode: winget` 时必填 |
+| `cleanupMode` | `winget-uninstall-if-new`、`owned-files-only`、`backup-restore` 或 `manual` |
+| `reason` | `manual` 项必填，写入报告 |
+
+模式行为：
+
+- `winget` — 先 `winget list --id <id> --exact`。已安装 → `completed`，绝不改动。否则 `winget install --id <id> --exact --source winget <silentInstallArgs>`，再复查。已有软件绝不卸载或升级。
+- 失败清理 — 安装失败但包已注册时，`cleanupMode: winget-uninstall-if-new` 立即卸载：卸载成功记 `failed_cleaned`，否则 `failed_uncleaned`。
+- `manual` — 不安装、不下载。记录为 `manual_required` 并附 `reason`，运行继续。
+- 其他模式（WSL、字体、RIME 桥接、输入法、托管 profile）由专门的 bootstrap 函数执行。
+
+运行结束的 `final-verification` 检查 `git.exe`、`pwsh.exe`、`wt.exe`、WSL 2 Ubuntu 实况、托管 PowerShell profile 区块，以及 Font、Mint RIME、输入法、profile 组件的存活状态。
+
+## Base 组 — `base.json`
+
+| 项目 | WinGet ID | 静默参数 | 验证方式 | 清理 |
+| --- | --- | --- | --- | --- |
+| Git | `Git.Git` | `--silent --accept-source-agreements --accept-package-agreements --disable-interactivity` | `winget list`；最终检查运行 `git.exe --version` | uninstall-if-new |
+| PowerShell 7 | `Microsoft.PowerShell` | 同上 | `winget list`；最终检查要求 `pwsh.exe` 主版本 ≥ 7 | uninstall-if-new |
+| Windows Terminal | `Microsoft.WindowsTerminal` | 同上 | `winget list`；最终检查运行 `wt.exe --version` | uninstall-if-new |
+
+## Core 组 — `core.json`
+
+| 项目 | 模式 | 来源 / 动作 | 验证 | 清理 |
+| --- | --- | --- | --- | --- |
+| WSL 2 + Ubuntu LTS | `wsl` | `wsl --install --distribution Ubuntu-24.04 --no-launch`，再设默认版本 2 | `wsl --list --verbose`：Ubuntu 发行版存在且为 version 2 | manual — 依赖 Windows servicing；需要重启时 bootstrap 注册一次性登录恢复任务并 `-Resume` 续跑 |
+| JetBrains Mono Nerd Font | `font` | 固定 `v3.5.1` 发布包，`sha256:fab782a66f7d3019da64f6572db9fc5d3a4bcb19f9fa13e2d8a62e3693d6396e` | 选中的 TTF 文件存在，且每个文件都有对应的 `HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts` 注册 | owned-files-only |
+| Mint RIME | `rime` | 调 `windows/install.ps1 -Profiles mint -InitialProfile mint -DeployMode Quiet -NoRaycast` | 本次调用新写出的 `install-report.json`（时间窗 + SHA-256）、mint `completed`、根目录/Junction 匹配 | manual |
+| Mint 默认输入法 | `input-method` | 当前用户语言列表 | 预期 TIP（`0804:E02\d+0804`）存在、英文项保留、API 可用时设置默认输入法 | manual |
+| PowerShell profiles | `powershell-profile` | [`windows-bootstrap/config/powershell/profile.ps1`](../windows-bootstrap/config/powershell/profile.ps1) 受管区块 | Windows PowerShell 5.1 与 PowerShell 7 profile 文件中都存在精确的受管区块 | backup-restore |
+
+## Optional 组 — `optional.json`
+
+WinGet 项 — 相同静默参数，用 `winget list` 验证，清理 `winget-uninstall-if-new`：
+
+| 项目 | WinGet ID |
+| --- | --- |
+| Obsidian | `Obsidian.Obsidian` |
+| Typora | `Typora.Typora` |
+| Thunderbird | `Mozilla.Thunderbird` |
+| Telegram | `Telegram.TelegramDesktop` |
+| Spotify | `Spotify.Spotify` |
+| Steam | `Valve.Steam` |
+| PotPlayer | `Daum.PotPlayer` |
+
+`manual_required` 项 — 绝不自动安装，逐项记录原因：
+
+| 项目 | 原因 |
+| --- | --- |
+| CC-Switch | 仓库内没有稳定、经过审查的无人值守安装契约 |
+| Clash Verge Rev | 官方安装包校验值与静默卸载契约未固定 |
+| Zen Browser | 仓库内没有稳定、经过审查的无人值守安装契约 |
+| Raycast | Windows 可用性与无人值守安装契约尚未确认 |
+| 百度网盘 | 官方安装包校验值与静默卸载契约未固定 |
+| 夸克网盘 | 官方安装包校验值与静默卸载契约未固定 |
+| dwall | 仓库内没有稳定、经过审查的无人值守安装契约 |
+| Geek Uninstaller | 便携/GUI 维护工具缺少经过审查的无人值守安装契约 |
+| 欧陆词典 | 官方安装包校验值与静默卸载契约未固定 |
+
+## 修改清单
+
+- 必须补齐全部契约字段；`windows-bootstrap/tests/run.ps1` 内含清单契约回归（缺字段、不支持的架构、缺 WinGet ID）。
+- 只有当 package ID、静默安装、验证、静默卸载全部固定并通过测试后，才把 `manual` 项升级为 `winget`。
+- 固定发布来源（如字体包）必须带精确 URL 与 SHA-256；WinGet 项依赖 WinGet 源与签名校验。

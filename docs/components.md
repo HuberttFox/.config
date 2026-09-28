@@ -55,7 +55,7 @@ Package-only components — no repository-managed configuration:
 | Fonts | `fonts.json` | Pinned JetBrains Mono Nerd Font (URL, SHA-256, file pattern) |
 | Optional | `optional.json` | Obsidian, Typora, Thunderbird, Telegram, Spotify, Steam, PotPlayer, CC-Switch, Clash Verge Rev, Zen Browser, Raycast, Baidu Netdisk, Quark Netdisk, dwall, Geek Uninstaller, Eudic |
 
-Every WinGet item must declare an explicit package ID and silent arguments. Items without a reliable silent install or verification stay `manual_required`; GUI automation is never simulated.
+Every WinGet item must declare an explicit package ID and silent arguments. Items without a reliable silent install or verification stay `manual_required`; GUI automation is never simulated. Per-item reference: [Windows bootstrap packages](windows-bootstrap-packages.md).
 
 ## Notes
 

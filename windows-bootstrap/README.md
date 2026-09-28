@@ -30,3 +30,5 @@ pwsh.exe -NoProfile -File .\windows-bootstrap\install.ps1 -Resume
 - 薄荷输入法通过现有 Weasel/RIME profile 配置；缺少中文语言或输入法 tip 时报告人工处理，不删除已有输入法。
 - 不配置系统代理、WinHTTP、Git identity、SSH key 或自定义环境变量。
 - 清理只删除本次运行记录的 owned paths；不卸载既有软件、不删除未知 AppData/注册表。
+
+完整软件清单（每项的 WinGet ID、静默参数、验证方式、manual 原因）见 [`../docs/windows-bootstrap-packages.zh-CN.md`](../docs/windows-bootstrap-packages.zh-CN.md)。

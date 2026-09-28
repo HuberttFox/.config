@@ -55,7 +55,7 @@
 | Fonts | `fonts.json` | 固定版本 JetBrains Mono Nerd Font（URL、SHA-256、file pattern） |
 | Optional | `optional.json` | Obsidian、Typora、Thunderbird、Telegram、Spotify、Steam、PotPlayer、CC-Switch、Clash Verge Rev、Zen Browser、Raycast、百度网盘、夸克网盘、dwall、Geek Uninstaller、欧陆词典 |
 
-每个 WinGet 项必须声明明确的 package ID 与静默参数。没有可靠静默安装或验证方式的项保持 `manual_required`；绝不模拟 GUI 操作。
+每个 WinGet 项必须声明明确的 package ID 与静默参数。没有可靠静默安装或验证方式的项保持 `manual_required`；绝不模拟 GUI 操作。逐项参考：[Windows bootstrap 软件清单](windows-bootstrap-packages.zh-CN.md)。
 
 ## 备注
 
