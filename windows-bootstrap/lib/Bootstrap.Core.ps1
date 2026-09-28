@@ -605,6 +605,7 @@ function Get-BootstrapManifestItems([string]$ManifestDirectory, [string[]]$Files
             if ($null -eq $item.uninstallCommand.args) { throw "Package manifest item uninstallCommand has no args: $($item.name)" }
             if ($null -eq $item.verification -or $item.verification -is [string] -or [string]::IsNullOrWhiteSpace([string]$item.verification.type)) { throw "Package manifest item has no verification metadata: $($item.name)" }
             if ($item.mode -eq 'winget' -and [string]::IsNullOrWhiteSpace([string]$item.wingetId)) { throw "WinGet item has no package ID: $($item.name)" }
+            if ($null -ne $item.PSObject.Properties['wingetSource'] -and [string]$item.wingetSource -notin @('winget', 'msstore')) { throw "Unsupported WinGet source for $($item.name): $($item.wingetSource)" }
             $items += $item
         }
     }
@@ -615,6 +616,14 @@ function Test-BootstrapWingetInstalled([string]$Winget, [string]$Id) {
     $result = Invoke-BootstrapExternal $Winget @('list', '--id', $Id, '--exact', '--accept-source-agreements', '--disable-interactivity')
     if ($result.ExitCode -ne 0) { return $false }
     return $result.Output -match [regex]::Escape($Id)
+}
+
+function Get-BootstrapWingetSource($Item) {
+    $property = $Item.PSObject.Properties['wingetSource']
+    if ($null -ne $property -and -not [string]::IsNullOrWhiteSpace([string]$property.Value)) { return [string]$property.Value }
+    $source = [string]$Item.source
+    if ($source -match '(?i)^msstore:') { return 'msstore' }
+    return 'winget'
 }
 
 function Invoke-BootstrapWingetInstall($Context, $Item, [string]$Winget) {
@@ -637,7 +646,7 @@ function Invoke-BootstrapWingetInstall($Context, $Item, [string]$Winget) {
     if ($before) {
         return [pscustomobject]@{ status = 'completed'; message = 'Already installed'; details = @{ id = $Item.wingetId; before = $true; installed = $false } }
     }
-    $args = @('install', '--id', [string]$Item.wingetId, '--exact', '--source', 'winget')
+    $args = @('install', '--id', [string]$Item.wingetId, '--exact', '--source', (Get-BootstrapWingetSource $Item))
     foreach ($argument in @($Item.silentInstallArgs)) {
         if (-not [string]::IsNullOrWhiteSpace([string]$argument)) { $args += [string]$argument }
     }

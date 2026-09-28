@@ -111,6 +111,19 @@
       },
       "verifyCommand": "wt.exe",
       "cleanupMode": "winget-uninstall-if-new"
+    },
+    {
+      "name": "lazygit",
+      "mode": "winget",
+      "wingetId": "JesseDuffield.lazygit",
+      "version": "winget-latest-stable",
+      "architecture": "x64",
+      "silentInstallArgs": ["--silent", "--accept-source-agreements", "--accept-package-agreements", "--disable-interactivity"],
+      "uninstallCommand": {"type": "winget", "args": ["uninstall", "--id", "{wingetId}", "--exact", "--silent", "--accept-source-agreements", "--disable-interactivity"]},
+      "source": "winget:JesseDuffield.lazygit",
+      "checksum": "winget-source-signed",
+      "verification": {"type": "winget-list", "command": "JesseDuffield.lazygit", "args": [], "expected": "installed in winget list"},
+      "cleanupMode": "winget-uninstall-if-new"
     }
   ]
 }

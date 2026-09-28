@@ -22,12 +22,13 @@
 | `checksum` | 完整性/验证策略 |
 | `verification` | `{ type, ... }` 验证元数据 |
 | `wingetId` | `mode: winget` 时必填 |
+| `wingetSource` | 可选 WinGet 源覆盖：`winget`（默认）或 `msstore` |
 | `cleanupMode` | `winget-uninstall-if-new`、`owned-files-only`、`backup-restore` 或 `manual` |
 | `reason` | `manual` 项必填，写入报告 |
 
 模式行为：
 
-- `winget` — 先 `winget list --id <id> --exact`。已安装 → `completed`，绝不改动。否则 `winget install --id <id> --exact --source winget <silentInstallArgs>`，再复查。已有软件绝不卸载或升级。
+- `winget` — 先 `winget list --id <id> --exact`。已安装 → `completed`，绝不改动。否则 `winget install --id <id> --exact --source <winget|msstore> <silentInstallArgs>`，再复查。源默认 `winget`；`wingetSource: msstore`（或 `source: msstore:<productId>` 前缀）选择 Microsoft Store 源，用于 Raycast。已有软件绝不卸载或升级。
 - 失败清理 — 安装失败但包已注册时，`cleanupMode: winget-uninstall-if-new` 立即卸载：卸载成功记 `failed_cleaned`，否则 `failed_uncleaned`。
 - `manual` — 不安装、不下载。记录为 `manual_required` 并附 `reason`，运行继续。
 - 其他模式（WSL、字体、RIME 桥接、输入法、托管 profile）由专门的 bootstrap 函数执行。
@@ -41,6 +42,7 @@
 | Git | `Git.Git` | `--silent --accept-source-agreements --accept-package-agreements --disable-interactivity` | `winget list`；最终检查运行 `git.exe --version` | uninstall-if-new |
 | PowerShell 7 | `Microsoft.PowerShell` | 同上 | `winget list`；最终检查要求 `pwsh.exe` 主版本 ≥ 7 | uninstall-if-new |
 | Windows Terminal | `Microsoft.WindowsTerminal` | 同上 | `winget list`；最终检查运行 `wt.exe --version` | uninstall-if-new |
+| lazygit | `JesseDuffield.lazygit` | 同上 | `winget list` | uninstall-if-new |
 
 ## Core 组 — `core.json`
 
@@ -65,23 +67,23 @@ WinGet 项 — 相同静默参数，用 `winget list` 验证，清理 `winget-un
 | Spotify | `Spotify.Spotify` |
 | Steam | `Valve.Steam` |
 | PotPlayer | `Daum.PotPlayer` |
+| CC-Switch | `farion1231.CC-Switch` |
+| Clash Verge Rev | `ClashVergeRev.ClashVergeRev` |
+| Zen Browser | `Zen-Team.Zen-Browser` |
+| Raycast | `9PFXXSHC64H3`（Microsoft Store 源） |
+| 百度网盘 | `Baidu.BaiduNetdisk` |
+| 夸克网盘 | `Alibaba.QuarkCloudDrive` |
+| 欧路词典 | `EuSoft.Eudic` |
+| Geek Uninstaller | `GeekUninstaller.GeekUninstaller` |
 
-`manual_required` 项 — 绝不自动安装，逐项记录原因：
+只剩 `dwall` 保持 `manual_required`——绝不自动安装，报告逐项记录原因：
 
 | 项目 | 原因 |
 | --- | --- |
-| CC-Switch | 仓库内没有稳定、经过审查的无人值守安装契约 |
-| Clash Verge Rev | 官方安装包校验值与静默卸载契约未固定 |
-| Zen Browser | 仓库内没有稳定、经过审查的无人值守安装契约 |
-| Raycast | Windows 可用性与无人值守安装契约尚未确认 |
-| 百度网盘 | 官方安装包校验值与静默卸载契约未固定 |
-| 夸克网盘 | 官方安装包校验值与静默卸载契约未固定 |
-| dwall | 仓库内没有稳定、经过审查的无人值守安装契约 |
-| Geek Uninstaller | 便携/GUI 维护工具缺少经过审查的无人值守安装契约 |
-| 欧陆词典 | 官方安装包校验值与静默卸载契约未固定 |
+| dwall | 仓库内没有稳定、经过审查的无人值守安装契约；其 GitHub release 安装包尚未实现为受管下载 |
 
 ## 修改清单
 
 - 必须补齐全部契约字段；`windows-bootstrap/tests/run.ps1` 内含清单契约回归（缺字段、不支持的架构、缺 WinGet ID）。
-- 只有当 package ID、静默安装、验证、静默卸载全部固定并通过测试后，才把 `manual` 项升级为 `winget`。
+- 只有当 package ID、静默安装、验证、静默卸载全部固定并通过测试后，才把 `manual` 项升级为 `winget`；仅 Microsoft Store 有货的产品使用 `wingetSource: msstore`。
 - 固定发布来源（如字体包）必须带精确 URL 与 SHA-256；WinGet 项依赖 WinGet 源与签名校验。

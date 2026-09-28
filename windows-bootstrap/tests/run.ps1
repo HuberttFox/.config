@@ -76,11 +76,17 @@ try {
 
     Invoke-TestCase 'manifest metadata contract' {
         $items = @(Get-BootstrapManifestItems (Join-Path $script:RepoRoot 'windows-bootstrap\packages') @('base.json', 'core.json', 'optional.json'))
-        Assert-Test ($items.Count -eq 24) 'unexpected manifest item count'
+        Assert-Test ($items.Count -eq 25) 'unexpected manifest item count'
         Assert-Test (@($items | Where-Object { $_.mode -eq 'manual' }).Count -gt 0) 'manual-required items missing'
         Assert-Test (@($items | Where-Object { $_.mode -eq 'winget' -and $_.architecture -eq 'x64' }).Count -gt 0) 'x64 WinGet metadata missing'
         $font = Get-BootstrapFontManifest (Join-Path $script:RepoRoot 'windows-bootstrap')
         Assert-Equal $font.sha256 'fab782a66f7d3019da64f6572db9fc5d3a4bcb19f9fa13e2d8a62e3693d6396e' 'font checksum changed'
+    }
+
+    Invoke-TestCase 'winget source resolves msstore override and defaults to winget' {
+        Assert-Test ((Get-BootstrapWingetSource ([pscustomobject]@{ source = 'winget:Example.Package' })) -eq 'winget') 'winget source prefix did not default to winget'
+        Assert-Test ((Get-BootstrapWingetSource ([pscustomobject]@{ source = 'msstore:9PFXXSHC64H3' })) -eq 'msstore') 'msstore source prefix was not honored'
+        Assert-Test ((Get-BootstrapWingetSource ([pscustomobject]@{ source = 'winget:Example.Package'; wingetSource = 'msstore' })) -eq 'msstore') 'explicit wingetSource override did not win'
     }
 
     Invoke-TestCase 'Windows 11 detection accepts registry Windows 10 label by build' {

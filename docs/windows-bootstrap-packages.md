@@ -22,12 +22,13 @@ Every manifest item must define the full contract below, or the installer throws
 | `checksum` | Integrity/verification policy |
 | `verification` | `{ type, ... }` verification metadata |
 | `wingetId` | Required when `mode: winget` |
+| `wingetSource` | Optional WinGet source override: `winget` (default) or `msstore` |
 | `cleanupMode` | `winget-uninstall-if-new`, `owned-files-only`, `backup-restore`, or `manual` |
 | `reason` | Required for `manual` items; recorded in the report |
 
 Mode behavior:
 
-- `winget` — `winget list --id <id> --exact` first. Already installed → `completed`, package left untouched. Otherwise `winget install --id <id> --exact --source winget <silentInstallArgs>`, then re-check with `winget list`. Existing packages are never uninstalled or upgraded.
+- `winget` — `winget list --id <id> --exact` first. Already installed → `completed`, package left untouched. Otherwise `winget install --id <id> --exact --source <winget|msstore> <silentInstallArgs>`, then re-check with `winget list`. The source defaults to `winget`; `wingetSource: msstore` (or a `source: msstore:<productId>` prefix) selects the Microsoft Store source, used for Raycast. Existing packages are never uninstalled or upgraded.
 - Failure cleanup — when an install fails after the package became registered, `cleanupMode: winget-uninstall-if-new` removes it immediately; the component result is `failed_cleaned` if removal succeeded, otherwise `failed_uncleaned`.
 - `manual` — nothing is installed or downloaded. The item is recorded as `manual_required` with its `reason`, and the run continues.
 - Non-WinGet modes are executed by dedicated bootstrap functions (WSL, font, RIME bridge, input method, managed profiles).
@@ -41,6 +42,7 @@ Post-run `final-verification` checks `git.exe`, `pwsh.exe`, `wt.exe`, a live WSL
 | Git | `Git.Git` | `--silent --accept-source-agreements --accept-package-agreements --disable-interactivity` | `winget list`; final check runs `git.exe --version` | uninstall-if-new |
 | PowerShell 7 | `Microsoft.PowerShell` | same | `winget list`; final check requires `pwsh.exe` with major version ≥ 7 | uninstall-if-new |
 | Windows Terminal | `Microsoft.WindowsTerminal` | same | `winget list`; final check runs `wt.exe --version` | uninstall-if-new |
+| lazygit | `JesseDuffield.lazygit` | same | `winget list` | uninstall-if-new |
 
 ## Core group — `core.json`
 
@@ -65,23 +67,23 @@ WinGet items — same silent arguments, verify via `winget list`, cleanup `winge
 | Spotify | `Spotify.Spotify` |
 | Steam | `Valve.Steam` |
 | PotPlayer | `Daum.PotPlayer` |
+| CC-Switch | `farion1231.CC-Switch` |
+| Clash Verge Rev | `ClashVergeRev.ClashVergeRev` |
+| Zen Browser | `Zen-Team.Zen-Browser` |
+| Raycast | `9PFXXSHC64H3` (Microsoft Store source) |
+| Baidu Netdisk | `Baidu.BaiduNetdisk` |
+| Quark Netdisk | `Alibaba.QuarkCloudDrive` |
+| Eudic | `EuSoft.Eudic` |
+| Geek Uninstaller | `GeekUninstaller.GeekUninstaller` |
 
-`manual_required` items — never installed automatically; each is reported with its reason:
+Only `dwall` remains `manual_required` — never installed automatically; the report carries its reason:
 
 | Item | Reason |
 | --- | --- |
-| CC-Switch | No stable, reviewed unattended Windows package contract in the repository |
-| Clash Verge Rev | Direct installer checksum and silent uninstall contract is not pinned |
-| Zen Browser | No stable, reviewed unattended Windows package contract in the repository |
-| Raycast | Windows availability and unattended installer contract are not established |
-| Baidu Netdisk | Direct installer checksum and silent uninstall contract is not pinned |
-| Quark Netdisk | Direct installer checksum and silent uninstall contract is not pinned |
-| dwall | No stable, reviewed unattended Windows package contract in the repository |
-| Geek Uninstaller | Portable/GUI maintenance tool lacks a reviewed unattended install contract |
-| Eudic | Direct installer checksum and silent uninstall contract is not pinned |
+| dwall | No stable, reviewed unattended Windows package contract in the repository; its GitHub release installer is not yet a managed download |
 
 ## Changing the manifests
 
 - Add every required contract field; `windows-bootstrap/tests/run.ps1` includes manifest-contract regression coverage (missing fields, unsupported architecture, missing WinGet ID).
-- Promote a `manual` item to `winget` only after its package ID, silent install, verification, and silent uninstall are all pinned and tested.
+- Promote a `manual` item to `winget` after its package ID, silent install, verification, and silent uninstall are all pinned and tested; use `wingetSource: msstore` for Microsoft Store-only products.
 - Pinned release sources (like the font archive) must carry an exact URL and SHA-256; WinGet items rely on the WinGet source and signature checks.
