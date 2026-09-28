@@ -323,12 +323,14 @@ function Recover-RimeJunctionTransaction([string]$Root, [string]$TransactionId, 
         Remove-Item -LiteralPath $backup -Force -ErrorAction Stop
         return [pscustomobject]@{ Status = 'cleanup'; Transaction = $TransactionId; Previous = $previousTarget; Target = $currentTarget }
     }
+    # A selector present during an unfinished transaction is ambiguous: it may
+    # have been recreated by another actor after the backup rename. Never remove
+    # or overwrite it during recovery; preserve both paths for explicit review.
     if (Test-Path -LiteralPath $selector) {
         $currentTarget = Get-RimeJunctionTarget $selector
         Assert-RimeSelectorTarget $selector $currentTarget $false
-        Remove-Item -LiteralPath $selector -Force -ErrorAction Stop
+        throw "Junction selector appeared during recovery: $selector"
     }
-    if (Test-Path -LiteralPath $selector) { throw "Junction selector appeared during recovery: $selector" }
     Move-Item -LiteralPath $backup -Destination $selector -ErrorAction Stop
     Assert-RimeJunction $selector $previousTarget | Out-Null
     return [pscustomobject]@{ Status = 'recovered'; Transaction = $TransactionId; Previous = $previousTarget }

@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "name": "JetBrains Mono Nerd Font",
+  "version": "v3.5.1",
+  "architecture": "all",
+  "url": "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.5.1/JetBrainsMono.zip",
+  "sha256": "fab782a66f7d3019da64f6572db9fc5d3a4bcb19f9fa13e2d8a62e3693d6396e",
+  "filePattern": "^(JetBrainsMono(NerdFont|NFM|NLF)?).+\\.ttf$",
+  "source": "GitHub release: ryanoasis/nerd-fonts v3.5.1",
+  "checksum": "sha256:fab782a66f7d3019da64f6572db9fc5d3a4bcb19f9fa13e2d8a62e3693d6396e",
+  "verification": {
+    "type": "font-files-and-hkcu-registration",
+    "expected": "selected JetBrains Mono Nerd Font TTF files"
+  }
+}

@@ -1,0 +1,116 @@
+{
+  "format": 1,
+  "group": "base",
+  "items": [
+    {
+      "name": "Git",
+      "mode": "winget",
+      "wingetId": "Git.Git",
+      "version": "winget-latest-stable",
+      "architecture": "x64",
+      "silentInstallArgs": [
+        "--silent",
+        "--accept-source-agreements",
+        "--accept-package-agreements",
+        "--disable-interactivity"
+      ],
+      "uninstallCommand": {
+        "type": "winget",
+        "args": [
+          "uninstall",
+          "--id",
+          "{wingetId}",
+          "--exact",
+          "--silent",
+          "--accept-source-agreements",
+          "--disable-interactivity"
+        ]
+      },
+      "source": "winget:Git.Git",
+      "checksum": "winget-source-signed",
+      "verification": {
+        "type": "command",
+        "command": "git.exe",
+        "args": [
+          "--version"
+        ]
+      },
+      "verifyCommand": "git.exe",
+      "cleanupMode": "winget-uninstall-if-new"
+    },
+    {
+      "name": "PowerShell 7",
+      "mode": "winget",
+      "wingetId": "Microsoft.PowerShell",
+      "version": "winget-latest-stable",
+      "architecture": "x64",
+      "silentInstallArgs": [
+        "--silent",
+        "--accept-source-agreements",
+        "--accept-package-agreements",
+        "--disable-interactivity"
+      ],
+      "uninstallCommand": {
+        "type": "winget",
+        "args": [
+          "uninstall",
+          "--id",
+          "{wingetId}",
+          "--exact",
+          "--silent",
+          "--accept-source-agreements",
+          "--disable-interactivity"
+        ]
+      },
+      "source": "winget:Microsoft.PowerShell",
+      "checksum": "winget-source-signed",
+      "verification": {
+        "type": "command-and-version",
+        "command": "pwsh.exe",
+        "args": [
+          "-NoProfile",
+          "-Command",
+          "$PSVersionTable.PSVersion.Major -ge 7"
+        ]
+      },
+      "verifyCommand": "pwsh.exe",
+      "cleanupMode": "winget-uninstall-if-new"
+    },
+    {
+      "name": "Windows Terminal",
+      "mode": "winget",
+      "wingetId": "Microsoft.WindowsTerminal",
+      "version": "winget-latest-stable",
+      "architecture": "x64",
+      "silentInstallArgs": [
+        "--silent",
+        "--accept-source-agreements",
+        "--accept-package-agreements",
+        "--disable-interactivity"
+      ],
+      "uninstallCommand": {
+        "type": "winget",
+        "args": [
+          "uninstall",
+          "--id",
+          "{wingetId}",
+          "--exact",
+          "--silent",
+          "--accept-source-agreements",
+          "--disable-interactivity"
+        ]
+      },
+      "source": "winget:Microsoft.WindowsTerminal",
+      "checksum": "winget-source-signed",
+      "verification": {
+        "type": "command",
+        "command": "wt.exe",
+        "args": [
+          "--version"
+        ]
+      },
+      "verifyCommand": "wt.exe",
+      "cleanupMode": "winget-uninstall-if-new"
+    }
+  ]
+}

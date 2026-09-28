@@ -1,0 +1,132 @@
+{
+  "format": 1,
+  "group": "core",
+  "items": [
+    {
+      "name": "WSL 2 + Ubuntu LTS",
+      "mode": "wsl",
+      "version": "Windows-feature-plus-Ubuntu-24.04",
+      "architecture": "x64",
+      "silentInstallArgs": [
+        "--install",
+        "--distribution",
+        "Ubuntu-24.04",
+        "--no-launch"
+      ],
+      "uninstallCommand": {
+        "type": "manual",
+        "args": []
+      },
+      "source": "Windows servicing + Microsoft WSL distribution",
+      "checksum": "platform-managed",
+      "verification": {
+        "type": "wsl-list-verbose",
+        "command": "wsl.exe",
+        "args": [
+          "--list",
+          "--verbose"
+        ],
+        "expected": "Ubuntu distro present with version 2"
+      },
+      "verifyCommand": "wsl.exe",
+      "cleanupMode": "manual",
+      "reason": "WSL feature and Ubuntu distribution require Windows servicing; installer handles reboot/resume separately."
+    },
+    {
+      "name": "JetBrains Mono Nerd Font",
+      "mode": "font",
+      "version": "v3.5.1",
+      "architecture": "all",
+      "silentInstallArgs": [],
+      "uninstallCommand": {
+        "type": "owned-files-only",
+        "args": []
+      },
+      "source": "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.5.1/JetBrainsMono.zip",
+      "checksum": "sha256:fab782a66f7d3019da64f6572db9fc5d3a4bcb19f9fa13e2d8a62e3693d6396e",
+      "verification": {
+        "type": "font-files-and-hkcu-registration",
+        "command": "HKCU\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts",
+        "args": [],
+        "expected": "selected JetBrains Mono Nerd Font TTF files"
+      },
+      "verifyCommand": "HKCU\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts",
+      "cleanupMode": "owned-files-only"
+    },
+    {
+      "name": "Mint RIME",
+      "mode": "rime",
+      "version": "repo-pinned-rime-lock",
+      "architecture": "x64",
+      "silentInstallArgs": [
+        "-DeployMode",
+        "Quiet",
+        "-NoRaycast",
+        "-PassThru"
+      ],
+      "uninstallCommand": {
+        "type": "manual",
+        "args": []
+      },
+      "source": "repository windows/install.ps1 + windows/manifests/rime.lock.json",
+      "checksum": "pinned-manifest-and-archive-sha256",
+      "verification": {
+        "type": "rime-install-report-and-junction",
+        "command": "windows/install.ps1",
+        "args": [
+          "-Profiles",
+          "mint",
+          "-InitialProfile",
+          "mint",
+          "-DeployMode",
+          "Quiet"
+        ],
+        "expected": "mint completed, selector and RimeUserDir verified"
+      },
+      "verifyCommand": "RimeConfig Junction + mint profile",
+      "cleanupMode": "manual"
+    },
+    {
+      "name": "Mint input method default",
+      "mode": "input-method",
+      "version": "current-user-language-list",
+      "architecture": "all",
+      "silentInstallArgs": [],
+      "uninstallCommand": {
+        "type": "manual",
+        "args": []
+      },
+      "source": "Windows current-user language and input-tip registration",
+      "checksum": "platform-managed",
+      "verification": {
+        "type": "current-user-input-tip",
+        "command": "Set-WinDefaultInputMethodOverride",
+        "args": [],
+        "expected": "Chinese Mint/Weasel TIP selected; English entry preserved"
+      },
+      "verifyCommand": "Get-WinUserLanguageList / Set-WinDefaultInputMethodOverride",
+      "cleanupMode": "manual"
+    },
+    {
+      "name": "PowerShell profiles",
+      "mode": "powershell-profile",
+      "version": "managed-block-format-1",
+      "architecture": "all",
+      "silentInstallArgs": [],
+      "uninstallCommand": {
+        "type": "backup-restore",
+        "args": []
+      },
+      "source": "repository windows-bootstrap/config/powershell/profile.ps1",
+      "checksum": "repository-controlled-template",
+      "verification": {
+        "type": "managed-block",
+        "command": "PowerShell profile paths",
+        "args": [],
+        "expected": "both profile files contain exact managed block"
+      },
+      "verifyCommand": "managed block in PS 5.1 and PS 7 profiles",
+      "cleanupMode": "backup-restore"
+    }
+  ]
+}

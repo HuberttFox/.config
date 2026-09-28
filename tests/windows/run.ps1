@@ -640,10 +640,31 @@ try {
         }
         Assert ($script:junctionForeignBackupMoves -eq 0) 'foreign selector target was moved into transaction backup'
     }
-    Case 'junction recovery never force-overwrites a selector appearing after removal' {
+    Case 'junction recovery never force-overwrites a selector appearing during recovery' {
         $recoveryBody = (Get-Command Recover-RimeJunctionTransaction -CommandType Function).ScriptBlock.ToString()
         Assert ($recoveryBody -notmatch 'Move-Item\s+-LiteralPath\s+\$backup\s+-Destination\s+\$selector\s+-Force') 'junction recovery force-overwrites a selector that appears during recovery'
         Assert ($recoveryBody -match 'Junction selector appeared during recovery') 'junction recovery does not reject a selector appearing before restore move'
+        if ($IsWindows) {
+            $root = Join-Path $temp 'junction-reappeared-native'
+            $selector = Join-Path $root 'RimeConfig'
+            $ice = Join-Path $root 'profiles/Rime_Ice'
+            $mint = Join-Path $root 'profiles/Rime_Mint'
+            [IO.Directory]::CreateDirectory($ice) | Out-Null
+            [IO.Directory]::CreateDirectory($mint) | Out-Null
+            $backup = Join-Path $root '.RimeConfig.reappear.previous'
+            try {
+                New-RimeJunction $selector $ice
+                Move-Item -LiteralPath $selector -Destination $backup
+                New-RimeJunction $selector $mint
+                Write-RimeJson (Join-Path $root 'state.json') @{ status = 'switching'; transaction = 'reappear' }
+                Throws { Recover-RimeJunctionTransaction $root 'reappear' } 'Junction selector appeared during recovery'
+                Assert ((Get-RimeJunctionTarget $selector) -ieq (Normalize-RimeWindowsPath $mint)) 'reappeared selector was changed'
+                Assert (Test-Path -LiteralPath $backup) 'pending backup was deleted after recovery refusal'
+            } finally {
+                if (Test-Path -LiteralPath $selector) { Remove-Item -LiteralPath $selector -Force -ErrorAction SilentlyContinue }
+                if (Test-Path -LiteralPath $backup) { Move-Item -LiteralPath $backup -Destination $selector -Force -ErrorAction SilentlyContinue }
+            }
+        }
     }
     Case 'verified Weasel process rejects a reparse runtime before process lookup' {
         $real = Join-Path $temp 'verified-server-real'; $link = Join-Path $temp 'verified-server-link'
@@ -1076,7 +1097,6 @@ try {
         if ($IsWindows) {
             New-RimeJunction $selector (Join-Path $root 'profiles/Rime_Ice')
             Move-Item -LiteralPath $selector -Destination $backup
-            New-RimeJunction $selector (Join-Path $root 'profiles/Rime_Mint')
             Write-RimeJson (Join-Path $root 'state.json') @{ status = 'switching'; transaction = 'txn' }
             $result = Recover-RimeJunctionTransaction $root 'txn'
             Assert ($result.Status -eq 'recovered') 'orphan selector was not recovered'
