@@ -87,6 +87,16 @@ function Invoke-BootstrapRun {
     }
     if ($operation -eq 'Report') { return $context }
 
+    if ($operation -in @('Run', 'Resume')) {
+        $policy = Get-BootstrapInstallPolicy
+        $context | Add-Member -NotePropertyName 'InstallPolicy' -NotePropertyValue $policy -Force
+        $context.State.installPolicy = $policy
+        $context.Report.installPolicy = $policy
+        Write-BootstrapLog $context ("Install policy: preferredRoot={0}, preferSecondaryDrive={1}" -f $policy.preferredRoot, $policy.preferSecondaryDrive)
+        $policyNote = if ($policy.preferSecondaryDrive) { ' (D: preferred)' } else { '' }
+        Write-BootstrapConsole $context ("Install root: {0}{1}" -f $policy.preferredRoot, $policyNote)
+    }
+
     Enter-BootstrapLock $context
     try {
         if ($operation -eq 'Verify') {

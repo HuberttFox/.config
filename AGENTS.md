@@ -46,6 +46,9 @@ elevation automatically when the window is not elevated; `-DryRun` and
   child output streams into `logs\bootstrap.log` and the report carries
   `logPath`. `-Quiet`/`-NoProgress` reduce console output; `-PassThru` stdout
   stays JSON-only.
+- Install-location policy: a fixed `D:` drive with at least 10 GB free makes
+  WinGet items with `installLocation` try `--location`; fall back to the system
+  drive and record attempted/actual locations instead of claiming a move.
 - Component failures continue the run; outcomes are explicit (`completed`,
   `failed`, `failed_uncleaned`, `recovery_required`, `manual_required`).
 - Lock paths may remain after a run; live handle exclusivity is the contract,

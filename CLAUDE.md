@@ -14,7 +14,9 @@ Two Windows features are separate from macOS `install.sh`:
   operations request UAC elevation when the window is not elevated;
   `-DryRun`/`-Report` never elevate. Progress lines and a `Write-Progress`
   bar are standard, child output streams into `logs\bootstrap.log`, and
-  `-Quiet`/`-NoProgress` reduce console output.
+  `-Quiet`/`-NoProgress` reduce console output. A fixed `D:` drive with
+  enough free space makes `installLocation` items try `--location`, with the
+  actual location recorded in the report.
 - `windows/` — RIME deployment targeting Windows 11 x64 and signed PowerShell 7
   x64 (`pwsh.exe`); existing Windows PowerShell 5.1 profiles remain untouched
   and unsupported by new RIME scripts.

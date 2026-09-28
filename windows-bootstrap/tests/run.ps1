@@ -165,6 +165,31 @@ try {
         }
     }
 
+    Invoke-TestCase 'install policy prefers a fixed secondary drive with enough free space' {
+        Assert-Test (Test-BootstrapPreferSecondaryDrive 3 214748364800 10737418240) 'fixed drive with space should be preferred'
+        Assert-Test (-not (Test-BootstrapPreferSecondaryDrive 2 214748364800 10737418240)) 'removable drive must not be preferred'
+        Assert-Test (-not (Test-BootstrapPreferSecondaryDrive 3 1073741824 10737418240)) 'low-space drive must not be preferred'
+    }
+
+    Invoke-TestCase 'install location follows the drive policy' {
+        $item = [pscustomobject]@{ installLocation = 'D:\Program Files\Git'; locationSupport = 'inno' }
+        $prefer = [pscustomobject]@{ preferSecondaryDrive = $true }
+        $fallback = [pscustomobject]@{ preferSecondaryDrive = $false }
+        Assert-Equal (Get-BootstrapItemInstallLocation $item ([pscustomobject]@{ InstallPolicy = $prefer })) 'D:\Program Files\Git' 'preferred location mismatch'
+        $systemDrive = if ([string]::IsNullOrWhiteSpace($env:SystemDrive)) { 'C:' } else { $env:SystemDrive }
+        Assert-Equal (Get-BootstrapItemInstallLocation $item ([pscustomobject]@{ InstallPolicy = $fallback })) ($systemDrive + '\Program Files\Git') 'fallback location mismatch'
+        $none = [pscustomobject]@{ installLocation = 'D:\Program Files\Git'; locationSupport = 'none' }
+        Assert-Equal (Get-BootstrapItemInstallLocation $none ([pscustomobject]@{ InstallPolicy = $prefer })) '' 'locationSupport none must disable --location'
+    }
+
+    Invoke-TestCase 'Git manifest carries a location preference' {
+        $items = @(Get-BootstrapManifestItems (Join-Path $script:RepoRoot 'windows-bootstrap\packages') @('base.json'))
+        $git = @($items | Where-Object { $_.name -eq 'Git' })[0]
+        Assert-Equal ([string]$git.installLocation) 'D:\Program Files\Git' 'Git installLocation missing'
+        Assert-Equal ([string]$git.locationProbe) 'cmd\git.exe' 'Git locationProbe missing'
+        Assert-Equal ([string]$git.locationSupport) 'inno' 'Git locationSupport missing'
+    }
+
     Invoke-TestCase 'elevated relaunch keeps the script path and bound parameters' {
         $bound = @{
             StateRoot = 'D:\state root'

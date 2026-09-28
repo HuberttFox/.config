@@ -160,6 +160,7 @@ flowchart TD
 - Component outcomes are explicit: `completed`, `failed`, `failed_uncleaned`, `recovery_required`, `manual_required`. Exit code `1` reflects failed or recovery-required components; manual-only runs exit `0`.
 - Cleanup removes or restores only current-run owned, fingerprint-matching paths; unknown software, AppData, and registry entries are never deleted.
 - Each component prints `[i/N] name - status (duration)` and updates a `Write-Progress` bar; long child output streams into `logs/bootstrap.log` and the report records `logPath`. `-Quiet` keeps only the log, and `-NoProgress` keeps text lines without the bar.
+- When `D:` is a suitable fixed disk, WinGet items with a declared `installLocation` are attempted there (`--location`) and the report records the attempted and actual locations; the system drive remains the fallback.
 - The execution record for this lifecycle is in [the acceptance evidence](handoff-windows-rime-native-acceptance-evidence.md).
 
 ## Native Windows acceptance

@@ -25,6 +25,9 @@ Every manifest item must define the full contract below, or the installer throws
 | `wingetSource` | Optional WinGet source override: `winget` (default) or `msstore` |
 | `url` | Required for `mode: download`; exact HTTPS installer URL |
 | `installerType` | Metadata only (`nsis`, `inno`, ...); the silent switches live in `silentInstallArgs` |
+| `installLocation` | Preferred absolute install directory (e.g. `D:\Program Files\Git`); used with WinGet `--location` when the drive policy prefers D: |
+| `locationSupport` | `inno`, `msi`, `nsis`, or `none`; `none` disables `--location` for the item |
+| `locationProbe` | Relative file checked under the attempted and fallback directories to report the actual location |
 | `cleanupMode` | `winget-uninstall-if-new`, `owned-files-only`, `backup-restore`, or `manual` |
 | `reason` | Required for `manual` items; recorded in the report |
 
@@ -85,6 +88,10 @@ WinGet items — same silent arguments, verify via `winget list`, cleanup `winge
 | dwall | 0.2.5 | `https://github.com/dwall-rs/dwall/releases/download/v0.2.5/Dwall.Settings_0.2.5_x64-setup.exe` | `sha256:c448c0d28843523f6121d9edff7d03dd74f422b83f97d0de42b3087f3a182fee` | `/S` | uninstall-registry entry `Dwall Settings` | download-uninstall-if-new |
 
 No `manual` items remain. The mode stays supported for future entries that cannot be pinned.
+
+## Install location policy
+
+When `D:` is a local fixed disk (`DriveType 3`) with at least 10 GB free, items that declare `installLocation` are attempted there through WinGet `--location`; otherwise the same relative path on the system drive is used. Installers that ignore the request still install normally, and the run records `attemptedLocation` plus, when `locationProbe` matches, `actualLocation` — the report never claims a move that did not happen. Git is the pilot for this behavior.
 
 ## Changing the manifests
 

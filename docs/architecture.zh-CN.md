@@ -160,6 +160,7 @@ flowchart TD
 - 组件结果是显式的：`completed`、`failed`、`failed_uncleaned`、`recovery_required`、`manual_required`。退出码 `1` 表示存在 failed 或 recovery_required；纯人工项运行退出 `0`。
 - Cleanup 只删除或恢复本次运行拥有且指纹匹配的路径；绝不删除未知软件、AppData 或注册表项。
 - 每个组件打印 `[i/N] 名称 - 状态 (耗时)` 并更新 `Write-Progress` 进度条；长任务子进程输出实时写入 `logs/bootstrap.log`，报告记录 `logPath`。`-Quiet` 只保留日志，`-NoProgress` 保留文本行但不要进度条。
+- 检测到可用的固定 `D:` 盘时，带 `installLocation` 的 WinGet 项会尝试装到该位置（`--location`），报告记录预期与实际位置；系统盘仍是回退。
 - 该生命周期的执行记录见 [验收证据](handoff-windows-rime-native-acceptance-evidence.md)。
 
 ## Windows 原生验收

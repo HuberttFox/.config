@@ -36,6 +36,9 @@
         ]
       },
       "verifyCommand": "git.exe",
+      "installLocation": "D:\\Program Files\\Git",
+      "locationSupport": "inno",
+      "locationProbe": "cmd\\git.exe",
       "cleanupMode": "winget-uninstall-if-new"
     },
     {

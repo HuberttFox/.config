@@ -25,6 +25,9 @@
 | `wingetSource` | 可选 WinGet 源覆盖：`winget`（默认）或 `msstore` |
 | `url` | `mode: download` 时必填；精确的 HTTPS 安装包直链 |
 | `installerType` | 仅元数据（`nsis`、`inno` 等）；静默参数在 `silentInstallArgs` |
+| `installLocation` | 期望的绝对安装目录（如 `D:\Program Files\Git`）；D 盘策略命中时通过 WinGet `--location` 传递 |
+| `locationSupport` | `inno`、`msi`、`nsis` 或 `none`；`none` 表示该项不传 `--location` |
+| `locationProbe` | 期望目录与回退目录下核对的实际文件，用于报告真实安装位置 |
 | `cleanupMode` | `winget-uninstall-if-new`、`owned-files-only`、`backup-restore` 或 `manual` |
 | `reason` | `manual` 项必填，写入报告 |
 
@@ -85,6 +88,10 @@ WinGet 项 — 相同静默参数，用 `winget list` 验证，清理 `winget-un
 | dwall | 0.2.5 | `https://github.com/dwall-rs/dwall/releases/download/v0.2.5/Dwall.Settings_0.2.5_x64-setup.exe` | `sha256:c448c0d28843523f6121d9edff7d03dd74f422b83f97d0de42b3087f3a182fee` | `/S` | 卸载注册表项 `Dwall Settings` | download-uninstall-if-new |
 
 已无 `manual` 项；该模式仍保留给将来无法固定的条目。
+
+## 安装位置策略
+
+当 `D:` 是本地固定磁盘（`DriveType 3`）且剩余空间不少于 10 GB 时，声明了 `installLocation` 的项会通过 WinGet `--location` 尝试装到该目录；否则使用系统盘上的同一相对路径。忽略该请求的安装器仍会正常安装，运行时记录 `attemptedLocation`，并在 `locationProbe` 命中时记录 `actualLocation`——报告不会声称未发生的迁移。Git 是该行为的试点。
 
 ## 修改清单
 

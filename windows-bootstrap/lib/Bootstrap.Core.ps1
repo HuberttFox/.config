@@ -154,6 +154,7 @@ function New-BootstrapState([string]$StateRoot, [string]$RunId, [string]$Selecte
         installedPackages = @()
         installedDownloads = @()
         failedDownloads = @()
+        installPolicy = $null
         cleanup = @()
         languageSnapshotBefore = $null
         executionOptions = @{}
@@ -170,6 +171,7 @@ function New-BootstrapReport([string]$StateRoot, [string]$RunId, [string]$Select
         profile = $SelectedProfile
         dryRun = $DryRun
         logPath = $null
+        installPolicy = $null
         host = $null
         results = @()
         success = @()
@@ -194,7 +196,7 @@ function Ensure-BootstrapStateShape($State) {
             $property.Value = @()
         }
     }
-    foreach ($name in @('languageSnapshotBefore', 'requiresReboot', 'resumeTask', 'nextPhase', 'executionOptions')) {
+    foreach ($name in @('languageSnapshotBefore', 'requiresReboot', 'resumeTask', 'nextPhase', 'executionOptions', 'installPolicy')) {
         if ($null -eq $State.PSObject.Properties[$name]) {
             $default = switch ($name) {
                 'languageSnapshotBefore' { $null }
@@ -218,7 +220,7 @@ function Ensure-BootstrapReportShape($Report) {
             $property.Value = @()
         }
     }
-    foreach ($name in @('host', 'finishedAt', 'requiresReboot', 'resumeTask', 'logPath')) {
+    foreach ($name in @('host', 'finishedAt', 'requiresReboot', 'resumeTask', 'logPath', 'installPolicy')) {
         if ($null -eq $Report.PSObject.Properties[$name]) {
             $default = if ($name -eq 'requiresReboot') { $false } else { $null }
             $Report | Add-Member -NotePropertyName $name -NotePropertyValue $default
@@ -500,6 +502,56 @@ function Get-BootstrapElevatedArguments([string]$ScriptPath, $BoundParameters) {
         $arguments += ('"{0}"' -f ([string]$value -replace '"', '\"'))
     }
     return $arguments
+}
+
+function Get-BootstrapDriveFacts([string]$DeviceId) {
+    $id = if ([string]::IsNullOrWhiteSpace($DeviceId)) { '' } else { $DeviceId.TrimEnd('\') }
+    $disk = $null
+    try { $disk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter ("DeviceID='{0}'" -f $id) -ErrorAction Stop | Select-Object -First 1 } catch { }
+    if ($null -eq $disk) { return [pscustomobject]@{ Exists = $false; DriveType = 0; FreeBytes = 0 } }
+    return [pscustomobject]@{ Exists = $true; DriveType = [int]$disk.DriveType; FreeBytes = [long]$disk.FreeSpace }
+}
+
+function Test-BootstrapPreferSecondaryDrive([int]$DriveType, [long]$FreeBytes, [long]$MinimumFreeBytes) {
+    # DriveType 3 is a local fixed disk; removable/network drives are never preferred.
+    return ($DriveType -eq 3) -and ($FreeBytes -ge $MinimumFreeBytes)
+}
+
+function Get-BootstrapInstallPolicy([long]$MinimumFreeBytes = 10737418240) {
+    $systemDrive = if ([string]::IsNullOrWhiteSpace($env:SystemDrive)) { 'C:' } else { $env:SystemDrive }
+    $systemProgramFiles = if ([string]::IsNullOrWhiteSpace($env:ProgramFiles)) { ($systemDrive.TrimEnd('\') + '\Program Files') } else { $env:ProgramFiles }
+    $facts = Get-BootstrapDriveFacts 'D:'
+    $prefer = $facts.Exists -and (Test-BootstrapPreferSecondaryDrive $facts.DriveType $facts.FreeBytes $MinimumFreeBytes)
+    return [pscustomobject]@{
+        preferSecondaryDrive = [bool]$prefer
+        preferredRoot = if ($prefer) { 'D:\Program Files' } else { $systemProgramFiles }
+        fallbackRoot = $systemProgramFiles
+        secondaryDrive = 'D:'
+        secondaryDriveFreeBytes = [long]$facts.FreeBytes
+        minimumFreeBytes = [long]$MinimumFreeBytes
+    }
+}
+
+function Get-BootstrapItemInstallLocation($Item, $Context) {
+    $template = [string](Get-BootstrapObjectProperty $Item 'installLocation')
+    if ([string]::IsNullOrWhiteSpace($template)) { return '' }
+    if ([string](Get-BootstrapObjectProperty $Item 'locationSupport') -eq 'none') { return '' }
+    $policy = Get-BootstrapObjectProperty $Context 'InstallPolicy'
+    if ($null -eq $policy) { return '' }
+    if ([bool](Get-BootstrapObjectProperty $policy 'preferSecondaryDrive')) { return $template }
+    $systemDrive = if ([string]::IsNullOrWhiteSpace($env:SystemDrive)) { 'C:' } else { $env:SystemDrive }
+    return ($template -replace '^[A-Za-z]:', $systemDrive)
+}
+
+function Get-BootstrapInstalledLocation($Item, [string]$RequestedLocation) {
+    $probe = [string](Get-BootstrapObjectProperty $Item 'locationProbe')
+    if ([string]::IsNullOrWhiteSpace($probe)) { return '' }
+    $systemDrive = if ([string]::IsNullOrWhiteSpace($env:SystemDrive)) { 'C:' } else { $env:SystemDrive }
+    foreach ($candidate in @($RequestedLocation, ($RequestedLocation -replace '^[A-Za-z]:', $systemDrive))) {
+        if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
+        if (Test-Path -LiteralPath (Join-Path $candidate $probe) -PathType Leaf) { return $candidate }
+    }
+    return ''
 }
 
 function Test-BootstrapWindows11([string]$ProductName, [string]$BuildNumber) {
@@ -792,12 +844,20 @@ function Invoke-BootstrapWingetInstall($Context, $Item, [string]$Winget) {
     foreach ($argument in @($Item.silentInstallArgs)) {
         if (-not [string]::IsNullOrWhiteSpace([string]$argument)) { $args += [string]$argument }
     }
+    $requestedLocation = Get-BootstrapItemInstallLocation $Item $Context
+    if (-not [string]::IsNullOrWhiteSpace($requestedLocation)) { $args += @('--location', $requestedLocation) }
     $result = Invoke-BootstrapExternal $Winget $args -TimeoutSeconds 900 -LogPath $Context.LogPath
     Write-BootstrapLog $Context ("winget $($Item.wingetId): $($result.Output)")
     if ($result.ExitCode -eq 0 -and (Test-BootstrapWingetInstalled $Winget ([string]$Item.wingetId))) {
         $Context.State.installedPackages = @($Context.State.installedPackages) + [pscustomobject]@{ id = $Item.wingetId; name = $Item.name; before = $false; at = [DateTime]::UtcNow.ToString('o') }
         Save-BootstrapContext $Context
-        return [pscustomobject]@{ status = 'completed'; message = 'Installed and verified'; details = @{ id = $Item.wingetId; before = $false; output = $result.Output } }
+        $details = @{ id = $Item.wingetId; before = $false; output = $result.Output }
+        if (-not [string]::IsNullOrWhiteSpace($requestedLocation)) {
+            $details.attemptedLocation = $requestedLocation
+            $actualLocation = Get-BootstrapInstalledLocation $Item $requestedLocation
+            if (-not [string]::IsNullOrWhiteSpace($actualLocation)) { $details.actualLocation = $actualLocation }
+        }
+        return [pscustomobject]@{ status = 'completed'; message = 'Installed and verified'; details = $details }
     }
     $cleanup = 'not attempted'
     if ([string]$Item.cleanupMode -eq 'winget-uninstall-if-new' -and (Test-BootstrapWingetInstalled $Winget ([string]$Item.wingetId))) {
