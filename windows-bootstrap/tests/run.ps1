@@ -126,6 +126,35 @@ try {
         Assert-Test (-not (Test-BootstrapDownloadCompletion ([pscustomobject]@{ details = [pscustomobject]@{ displayName = '' } }))) 'empty display name should not be complete'
     }
 
+    Invoke-TestCase 'elevation policy covers mutating operations only' {
+        Assert-Test (Test-BootstrapElevationRequired $false 'Run' $false) 'Run should require elevation'
+        Assert-Test (Test-BootstrapElevationRequired $false 'Resume' $false) 'Resume should require elevation'
+        Assert-Test (Test-BootstrapElevationRequired $false 'Verify' $false) 'Verify should require elevation'
+        Assert-Test (Test-BootstrapElevationRequired $false 'Cleanup' $false) 'Cleanup should require elevation'
+        Assert-Test (-not (Test-BootstrapElevationRequired $false 'DryRun' $false)) 'DryRun should not require elevation'
+        Assert-Test (-not (Test-BootstrapElevationRequired $false 'Report' $false)) 'Report should not require elevation'
+        Assert-Test (-not (Test-BootstrapElevationRequired $true 'Run' $false)) 'elevated sessions should not re-elevate'
+        Assert-Test (-not (Test-BootstrapElevationRequired $false 'Run' $true)) 'NoElevate should suppress elevation'
+    }
+
+    Invoke-TestCase 'elevated relaunch keeps the script path and bound parameters' {
+        $bound = @{
+            StateRoot = 'D:\state root'
+            SkipRime = [System.Management.Automation.SwitchParameter]::new($true)
+            DryRun = [System.Management.Automation.SwitchParameter]::new($false)
+        }
+        $arguments = @(Get-BootstrapElevatedArguments 'D:\repo\windows-bootstrap\install.ps1' $bound)
+        Assert-Test ($arguments -contains '-NoProfile') 'profile flag missing'
+        Assert-Test ($arguments -contains '-ExecutionPolicy') 'execution policy flag missing'
+        Assert-Test ($arguments -contains 'Bypass') 'bypass value missing'
+        Assert-Test ($arguments -contains '-File') 'file flag missing'
+        Assert-Test ($arguments -contains '"D:\repo\windows-bootstrap\install.ps1"') 'script path missing'
+        Assert-Test ($arguments -contains '-StateRoot') 'StateRoot name missing'
+        Assert-Test ($arguments -contains '"D:\state root"') 'StateRoot value not quoted'
+        Assert-Test ($arguments -contains '-SkipRime') 'enabled switch missing'
+        Assert-Test (-not ($arguments -contains '-DryRun')) 'disabled switch should be dropped'
+    }
+
     Invoke-TestCase 'external process timeout is enforced and reported' {
         if ([Environment]::OSVersion.Platform -eq 'Win32NT') {
             $started = Get-Date

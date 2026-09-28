@@ -10,7 +10,9 @@ Two Windows features are separate from macOS `install.sh`:
   PowerShell 5.1 and PowerShell 7; scripts declare `#requires -Version 5.1`.
   `-DryRun` stays mutation-free; component failures continue with explicit
   outcomes (`completed`, `failed`, `failed_uncleaned`, `recovery_required`,
-  `manual_required`); cleanup touches only current-run owned paths.
+  `manual_required`); cleanup touches only current-run owned paths. Mutating
+  operations request UAC elevation when the window is not elevated;
+  `-DryRun`/`-Report` never elevate.
 - `windows/` — RIME deployment targeting Windows 11 x64 and signed PowerShell 7
   x64 (`pwsh.exe`); existing Windows PowerShell 5.1 profiles remain untouched
   and unsupported by new RIME scripts.

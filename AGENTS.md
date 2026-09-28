@@ -39,6 +39,9 @@ Bootstrap rules:
 
 - `-DryRun` must not create state/report/log/lock/cache files or mutate
   Registry, profiles, WSL, input methods, or invoke installers/discovery.
+- Mutating operations (`Run`/`Resume`/`Verify`/`CleanupFailed`) request UAC
+elevation automatically when the window is not elevated; `-DryRun` and
+  `-Report` never elevate; `-NoElevate` disables the relaunch.
 - Component failures continue the run; outcomes are explicit (`completed`,
   `failed`, `failed_uncleaned`, `recovery_required`, `manual_required`).
 - Lock paths may remain after a run; live handle exclusivity is the contract,

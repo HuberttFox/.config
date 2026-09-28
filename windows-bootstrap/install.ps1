@@ -14,7 +14,8 @@ param(
     [switch]$NoOptional,
     [switch]$NoNetworkCheck,
     [switch]$PassThru,
-    [switch]$Force
+    [switch]$Force,
+    [switch]$NoElevate
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -243,6 +244,23 @@ function Invoke-BootstrapRun {
 }
 
 try {
+    # DryRun is read-only and never elevates, even though its base operation is Run.
+    $operation = Get-BootstrapOperation
+    if ($DryRun) { $operation = 'DryRun' }
+    if (Test-BootstrapElevationRequired (Test-BootstrapAdministrator) $operation ([bool]$NoElevate)) {
+        Write-Host "Administrator privileges are required for '$operation'; requesting elevation..."
+        $hostPath = $null
+        try { $hostPath = (Get-Process -Id $PID -ErrorAction Stop).Path } catch { }
+        if ([string]::IsNullOrWhiteSpace($hostPath)) { $hostPath = Join-Path $PSHOME 'powershell.exe' }
+        $elevatedArguments = @(Get-BootstrapElevatedArguments $PSCommandPath $PSBoundParameters)
+        try {
+            $elevated = Start-Process -FilePath $hostPath -Verb RunAs -ArgumentList ($elevatedArguments -join ' ') -PassThru -Wait -ErrorAction Stop
+        } catch {
+            Write-Error "Elevation was declined or failed: $($_.Exception.Message) (re-run from an elevated window, or pass -NoElevate to keep the old behaviour)"
+            exit 1
+        }
+        exit [int]$elevated.ExitCode
+    }
     $result = Invoke-BootstrapRun
     if ($Report -or $PassThru) {
         if ($result.DryRun) { ConvertTo-BootstrapJsonText $result.Report }

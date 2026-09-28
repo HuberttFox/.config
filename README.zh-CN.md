@@ -32,7 +32,7 @@ macOS 引导配置仓库，应放置在 `~/.config`。`install.sh` 管理 Homebr
 
 Windows 11 x64 有两个独立入口，都不经过 `install.sh`：
 
-- [`windows-bootstrap/install.ps1`](windows-bootstrap/) — 无人值守全量引导：preflight、WinGet 软件包、WSL 2 + Ubuntu LTS、固定 JetBrains Mono Nerd Font、受管 PowerShell profile 以及 RIME 步骤；支持 `Run`/`Resume`/`Verify`/`Report`/`CleanupFailed`/`DryRun`，兼容 Windows PowerShell 5.1 与 PowerShell 7。免执行策略的启动器为 [`install.cmd`](windows-bootstrap/install.cmd)。
+- [`windows-bootstrap/install.ps1`](windows-bootstrap/) — 无人值守全量引导：preflight、WinGet 软件包、WSL 2 + Ubuntu LTS、固定 JetBrains Mono Nerd Font、受管 PowerShell profile 以及 RIME 步骤；支持 `Run`/`Resume`/`Verify`/`Report`/`CleanupFailed`/`DryRun`，兼容 Windows PowerShell 5.1 与 PowerShell 7。免执行策略的启动器为 [`install.cmd`](windows-bootstrap/install.cmd)。需要管理员的操作在非提权窗口会自动申请 UAC；`-DryRun` 与 `-Report` 不提权。
 
 ```powershell
 pwsh.exe -NoProfile -File .\windows-bootstrap\install.ps1

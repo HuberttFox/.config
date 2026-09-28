@@ -12,8 +12,10 @@ pwsh.exe -NoProfile -File .\windows-bootstrap\install.ps1
 
 Git Bash/MSYS2/Cygwin 下的统一入口 `./bootstrap.sh` 会转发到这里（优先 `pwsh.exe`，缺失时回退 `powershell.exe`，并自动加 `-ExecutionPolicy Bypass`）。
 
+管理员权限：`Run`/`Resume`/`Verify`/`CleanupFailed` 需要管理员。若在非管理员窗口启动，脚本会立即通过 UAC 重新启动自身（保留原参数）并透传退出码；已在管理员窗口时静默执行，不重复弹窗。`-DryRun` 与 `-Report` 是只读操作，不提权；`-NoElevate` 可关闭自动提权（沿用原来的 `Administrator privileges are required` 报错）。
+
 ```batch
-:: 免执行策略启动（安装/恢复等请在管理员终端运行）
+:: 免执行策略启动（非管理员窗口会自动申请提权）
 .\windows-bootstrap\install.cmd -DryRun
 ```
 

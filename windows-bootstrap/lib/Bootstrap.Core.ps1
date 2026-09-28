@@ -460,6 +460,26 @@ function Test-BootstrapAdministrator {
     } catch { return $false }
 }
 
+function Test-BootstrapElevationRequired([bool]$IsAdministrator, [string]$Operation, [bool]$NoElevate) {
+    if ($IsAdministrator -or $NoElevate) { return $false }
+    return [string]$Operation -in @('Run', 'Resume', 'Verify', 'Cleanup')
+}
+
+function Get-BootstrapElevatedArguments([string]$ScriptPath, $BoundParameters) {
+    $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"{0}"' -f $ScriptPath))
+    foreach ($name in @($BoundParameters.Keys)) {
+        $value = $BoundParameters[$name]
+        if ($value -is [System.Management.Automation.SwitchParameter]) {
+            if ($value.IsPresent) { $arguments += ('-{0}' -f $name) }
+            continue
+        }
+        if ($null -eq $value -or [string]::IsNullOrWhiteSpace([string]$value)) { continue }
+        $arguments += ('-{0}' -f $name)
+        $arguments += ('"{0}"' -f ([string]$value -replace '"', '\"'))
+    }
+    return $arguments
+}
+
 function Test-BootstrapWindows11([string]$ProductName, [string]$BuildNumber) {
     if ([string]::IsNullOrWhiteSpace($ProductName)) { return $false }
     if ($ProductName -match '(?i)\bServer\b') { return $false }
