@@ -79,6 +79,7 @@ WinGet items — same silent arguments, verify via `winget list`, cleanup `winge
 | Baidu Netdisk | `Baidu.BaiduNetdisk` |
 | Quark Netdisk | `Alibaba.QuarkCloudDrive` |
 | Eudic | `EuSoft.Eudic` |
+| Visual Studio Code | `Microsoft.VisualStudioCode` |
 | Geek Uninstaller | `GeekUninstaller.GeekUninstaller` |
 
 ## Pinned download item — `dwall`
@@ -91,9 +92,9 @@ No `manual` items remain. The mode stays supported for future entries that canno
 
 ## Install location policy
 
-When `D:` is a local fixed disk (`DriveType 3`) with at least 10 GB free, items that declare `installLocation` are attempted there through WinGet `--location`; otherwise the same relative path on the system drive is used. Installers that ignore the request still install normally, and the run records `attemptedLocation` plus, when `locationProbe` matches, `actualLocation` — the report never claims a move that did not happen. Git is the pilot for this behavior.
+When `D:` is a local fixed disk (`DriveType 3`) with at least 10 GB free, items that declare `installLocation` are attempted there through WinGet `--location`; otherwise the same relative path on the system drive is used. Installers that ignore the request still install normally, and the run records `attemptedLocation` plus, when `locationProbe` matches, `actualLocation` — the report never claims a move that did not happen. Git and Visual Studio Code are the pilots for this behavior.
 
-Machine scope matters: Git's Inno installer only honors `--location` when WinGet installs it with `--scope machine`, so the Git item passes that switch (verified on the disposable guest: both locations were `D:\Program Files\Git`). Other items keep their own scope defaults until each one is verified.
+Machine scope matters: Inno installers such as Git and Visual Studio Code only honor `--location` when WinGet installs them with `--scope machine`, so both items pass that switch (verified on the disposable guest: locations resolved to `D:\Program Files\Git` and `D:\Program Files\Microsoft VS Code`). Other items keep their own scope defaults until each one is verified.
 
 ## Changing the manifests
 

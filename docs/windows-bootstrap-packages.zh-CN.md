@@ -79,6 +79,7 @@ WinGet 项 — 相同静默参数，用 `winget list` 验证，清理 `winget-un
 | 百度网盘 | `Baidu.BaiduNetdisk` |
 | 夸克网盘 | `Alibaba.QuarkCloudDrive` |
 | 欧路词典 | `EuSoft.Eudic` |
+| Visual Studio Code | `Microsoft.VisualStudioCode` |
 | Geek Uninstaller | `GeekUninstaller.GeekUninstaller` |
 
 ## 固定直链下载项 — `dwall`
@@ -91,9 +92,9 @@ WinGet 项 — 相同静默参数，用 `winget list` 验证，清理 `winget-un
 
 ## 安装位置策略
 
-当 `D:` 是本地固定磁盘（`DriveType 3`）且剩余空间不少于 10 GB 时，声明了 `installLocation` 的项会通过 WinGet `--location` 尝试装到该目录；否则使用系统盘上的同一相对路径。忽略该请求的安装器仍会正常安装，运行时记录 `attemptedLocation`，并在 `locationProbe` 命中时记录 `actualLocation`——报告不会声称未发生的迁移。Git 是该行为的试点。
+当 `D:` 是本地固定磁盘（`DriveType 3`）且剩余空间不少于 10 GB 时，声明了 `installLocation` 的项会通过 WinGet `--location` 尝试装到该目录；否则使用系统盘上的同一相对路径。忽略该请求的安装器仍会正常安装，运行时记录 `attemptedLocation`，并在 `locationProbe` 命中时记录 `actualLocation`——报告不会声称未发生的迁移。Git 与 Visual Studio Code 是该行为的试点。
 
-机器级作用域很关键：Git 的 Inno 安装器只有在 WinGet 以 `--scope machine` 安装时才会采纳 `--location`，因此 Git 项额外传递该开关（已在 disposable guest 验证：预期与实际位置均为 `D:\Program Files\Git`）。其他项在逐项验证前保持各自的默认 scope。
+机器级作用域很关键：Git、Visual Studio Code 这类 Inno 安装器只有在 WinGet 以 `--scope machine` 安装时才会采纳 `--location`，因此两项都传递该开关（已在 disposable guest 验证：位置分别为 `D:\Program Files\Git` 与 `D:\Program Files\Microsoft VS Code`）。其他项在逐项验证前保持各自的默认 scope。
 
 ## 修改清单
 

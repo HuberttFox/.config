@@ -80,7 +80,7 @@ try {
 
     Invoke-TestCase 'manifest metadata contract' {
         $items = @(Get-BootstrapManifestItems (Join-Path $script:RepoRoot 'windows-bootstrap\packages') @('base.json', 'core.json', 'optional.json'))
-        Assert-Test ($items.Count -eq 23) 'unexpected manifest item count'
+        Assert-Test ($items.Count -eq 24) 'unexpected manifest item count'
         Assert-Test (@($items | Where-Object { $_.mode -eq 'download' }).Count -gt 0) 'download item missing'
         Assert-Test (@($items | Where-Object { $_.mode -eq 'winget' -and $_.architecture -eq 'x64' }).Count -gt 0) 'x64 WinGet metadata missing'
         $font = Get-BootstrapFontManifest (Join-Path $script:RepoRoot 'windows-bootstrap')
@@ -190,6 +190,16 @@ try {
         Assert-Equal ([string]$git.locationSupport) 'inno' 'Git locationSupport missing'
         Assert-Test ($git.silentInstallArgs -contains '--scope') 'Git --scope missing'
         Assert-Test ($git.silentInstallArgs -contains 'machine') 'Git machine scope value missing'
+    }
+
+    Invoke-TestCase 'VS Code manifest carries a D: location preference' {
+        $items = @(Get-BootstrapManifestItems (Join-Path $script:RepoRoot 'windows-bootstrap\packages') @('optional.json'))
+        $code = @($items | Where-Object { $_.name -eq 'Visual Studio Code' })[0]
+        Assert-Equal ([string]$code.wingetId) 'Microsoft.VisualStudioCode' 'VS Code winget ID missing'
+        Assert-Equal ([string]$code.installLocation) 'D:\Program Files\Microsoft VS Code' 'VS Code installLocation missing'
+        Assert-Equal ([string]$code.locationProbe) 'Code.exe' 'VS Code locationProbe missing'
+        Assert-Test ($code.silentInstallArgs -contains '--scope') 'VS Code --scope missing'
+        Assert-Test ($code.silentInstallArgs -contains 'machine') 'VS Code machine scope value missing'
     }
 
     Invoke-TestCase 'elevated relaunch keeps the script path and bound parameters' {

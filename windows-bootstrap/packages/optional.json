@@ -190,6 +190,22 @@
       "checksum": "winget-source-signed",
       "verification": {"type": "winget-list", "command": "EuSoft.Eudic", "args": [], "expected": "installed in winget list"},
       "cleanupMode": "winget-uninstall-if-new"
+    },
+    {
+      "name": "Visual Studio Code",
+      "mode": "winget",
+      "wingetId": "Microsoft.VisualStudioCode",
+      "version": "winget-latest-stable",
+      "architecture": "x64",
+      "silentInstallArgs": ["--silent", "--accept-source-agreements", "--accept-package-agreements", "--disable-interactivity", "--scope", "machine"],
+      "uninstallCommand": {"type": "winget", "args": ["uninstall", "--id", "{wingetId}", "--exact", "--silent", "--accept-source-agreements", "--disable-interactivity"]},
+      "source": "winget:Microsoft.VisualStudioCode",
+      "checksum": "winget-source-signed",
+      "verification": {"type": "winget-list", "command": "Microsoft.VisualStudioCode", "args": [], "expected": "installed in winget list"},
+      "installLocation": "D:\\Program Files\\Microsoft VS Code",
+      "locationSupport": "inno",
+      "locationProbe": "Code.exe",
+      "cleanupMode": "winget-uninstall-if-new"
     }
   ]
 }
