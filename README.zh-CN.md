@@ -46,7 +46,7 @@ pwsh.exe -NoProfile -File .\windows-bootstrap\install.ps1
 pwsh.exe -NoProfile -File .\windows\install.ps1
 ```
 
-Windows Git Bash/MSYS2/Cygwin 可由 [`bootstrap.sh`](bootstrap.sh) 分派到 RIME 入口；macOS 仍委派给 `install.sh`，Linux/WSL 被拒绝。
+Windows Git Bash/MSYS2/Cygwin 下，[`bootstrap.sh`](bootstrap.sh) 是统一入口：转发到完整 Windows bootstrap（`windows-bootstrap/install.ps1`，优先 PowerShell 7，缺失时用 Windows PowerShell 5.1）；macOS 仍委派 `install.sh`；Linux/WSL 被拒绝。RIME 专用入口仍可直接使用 `windows/install.ps1`。
 
 参见 [Windows bootstrap 指南](windows-bootstrap/README.md)、[软件清单参考](docs/windows-bootstrap-packages.zh-CN.md)、[Windows RIME 指南](windows/README.zh-CN.md) 与 [原生验收证据](docs/handoff-windows-rime-native-acceptance-evidence.md)。便携测试不认证 Windows 原生 Registry、ACL、Junction、Weasel、进程隔离、reparse race 或 Raycast。
 

@@ -51,9 +51,11 @@ From Git Bash, MSYS2, or Cygwin on Windows:
 ./bootstrap.sh
 ```
 
-`bootstrap.sh` dispatches to `windows/install.ps1` only from MINGW/MSYS/Cygwin.
-On macOS it delegates to the existing `install.sh`; on Linux and WSL it exits
-with status `2`. Run the Windows installer from the Windows host, not WSL.
+`bootstrap.sh` is the unified entry: on MINGW/MSYS/Cygwin it forwards to the
+full Windows bootstrap (`windows-bootstrap/install.ps1`, PowerShell 7 or
+Windows PowerShell 5.1), which runs this RIME installer for the Mint step. On
+macOS it delegates to `install.sh`; on Linux and WSL it exits with status `2`.
+Use `windows/install.ps1` directly for RIME-only control.
 
 Useful installation variants:
 

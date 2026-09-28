@@ -33,7 +33,7 @@ pwsh.exe -NoProfile -File .\windows\install.ps1
 ./bootstrap.sh
 ```
 
-`bootstrap.sh` 仅在 MINGW/MSYS/Cygwin 分派到 `windows/install.ps1`；macOS 仍委派既有 `install.sh`；Linux/WSL 返回状态 `2`。必须从 Windows host 运行安装，不要从 WSL 运行。
+`bootstrap.sh` 是统一入口：MINGW/MSYS/Cygwin 下转发到完整 Windows bootstrap（`windows-bootstrap/install.ps1`，PowerShell 7 或 Windows PowerShell 5.1），其中会调用本安装器完成 Mint 步骤；macOS 仍委派 `install.sh`；Linux/WSL 返回状态 `2`。只想控制 RIME 时可直接用 `windows/install.ps1`。
 
 常用变体：
 

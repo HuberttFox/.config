@@ -21,9 +21,9 @@ dotfiles 引导仓库的技术文档。
 ## 速查
 
 - macOS 安装器：`./install.sh`（见 [README](../README.zh-CN.md)）
-- Windows bootstrap：Windows 11 x64 运行 `pwsh.exe -NoProfile -File .\windows-bootstrap\install.ps1`（Windows PowerShell 5.1 或 PowerShell 7）；`-DryRun` 不产生任何变更。若脚本被执行策略阻止，可用 `windows-bootstrap\install.cmd`、`-ExecutionPolicy Bypass` 或 `Set-ExecutionPolicy -Scope Process Bypass`。
+- Windows bootstrap：Windows 11 x64 运行 `pwsh.exe -NoProfile -File .\windows-bootstrap\install.ps1`（Windows PowerShell 5.1 或 PowerShell 7）；`-DryRun` 不产生任何变更。统一入口 `bootstrap.sh` 在 Windows Git Bash/MSYS2/Cygwin 下转发到这里；macOS 走 `install.sh`。若脚本被执行策略阻止，可用 `windows-bootstrap\install.cmd`、`-ExecutionPolicy Bypass` 或 `Set-ExecutionPolicy -Scope Process Bypass`。
 - Windows bootstrap 软件清单：[windows-bootstrap-packages.zh-CN.md](windows-bootstrap-packages.zh-CN.md) — 每一项的 WinGet ID、静默参数、验证方式与清理策略。
-- Windows RIME：Windows 11 x64 运行 `pwsh.exe -NoProfile -File .\windows\install.ps1`；`bootstrap.sh` 仅在 Windows MINGW/MSYS/Cygwin 分派。
+- Windows RIME：直接入口 `pwsh.exe -NoProfile -File .\windows\install.ps1`（Windows 11 x64）；统一 bootstrap 会在 Mint 步骤调用它。
 - 代理指南：[AGENTS.md](../AGENTS.md)
 - macOS 沙箱测试：`./tests/integration.sh`
 - Windows 便携测试：`pwsh -NoProfile -File .\tests\windows\run.ps1`；不等于 Windows 原生验收。

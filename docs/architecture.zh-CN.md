@@ -137,7 +137,7 @@ flowchart LR
 
 ## Windows bootstrap 流程
 
-`windows-bootstrap/install.ps1` 是独立生命周期，不是 `install.sh` 的子命令。支持 Windows 11 x64 上的 Windows PowerShell 5.1 与 PowerShell 7。
+`windows-bootstrap/install.ps1` 是独立生命周期，不是 `install.sh` 的子命令。支持 Windows 11 x64 上的 Windows PowerShell 5.1 与 PowerShell 7。统一入口 `bootstrap.sh` 在 Windows Git Bash/MSYS2/Cygwin 下转发到这里（优先 PowerShell 7，缺失时用 Windows PowerShell 5.1）；macOS 仍委派 `install.sh`，Linux/WSL 被拒绝。
 
 ```mermaid
 flowchart TD

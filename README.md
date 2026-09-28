@@ -46,7 +46,7 @@ Or use [`windows-bootstrap/install.cmd`](windows-bootstrap/install.cmd), which s
 pwsh.exe -NoProfile -File .\windows\install.ps1
 ```
 
-From Windows Git Bash/MSYS2/Cygwin, [`bootstrap.sh`](bootstrap.sh) dispatches to the RIME entrypoint. It keeps macOS behavior by delegating to `install.sh` and rejects Linux/WSL.
+From Windows Git Bash/MSYS2/Cygwin, [`bootstrap.sh`](bootstrap.sh) forwards to the full Windows bootstrap (`windows-bootstrap/install.ps1`, PowerShell 7 or Windows PowerShell 5.1), delegates to `install.sh` on macOS, and rejects Linux/WSL. The RIME-only entry stays available as `windows/install.ps1`.
 
 See the [Windows bootstrap guide](windows-bootstrap/README.md), the [bootstrap package reference](docs/windows-bootstrap-packages.md), the [Windows RIME guide](windows/README.md), and the [native acceptance evidence](docs/handoff-windows-rime-native-acceptance-evidence.md). Portable tests do not certify Windows-native Registry, ACL, Junction, Weasel, process-isolation, reparse-race, or Raycast behavior.
 

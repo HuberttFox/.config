@@ -21,9 +21,9 @@ Technical documentation for the dotfiles bootstrap repository.
 ## Quick reference
 
 - macOS installer: `./install.sh` (see [README](../README.md))
-- Windows bootstrap: `pwsh.exe -NoProfile -File .\windows-bootstrap\install.ps1` on Windows 11 x64 (Windows PowerShell 5.1 or PowerShell 7); `-DryRun` is mutation-free. If scripts are disabled, use `windows-bootstrap\install.cmd`, `-ExecutionPolicy Bypass`, or `Set-ExecutionPolicy -Scope Process Bypass`.
+- Windows bootstrap: `pwsh.exe -NoProfile -File .\windows-bootstrap\install.ps1` on Windows 11 x64 (Windows PowerShell 5.1 or PowerShell 7); `-DryRun` is mutation-free. The unified `bootstrap.sh` forwards Windows Git Bash/MSYS2/Cygwin here; macOS uses `install.sh`. If scripts are disabled, use `windows-bootstrap\install.cmd`, `-ExecutionPolicy Bypass`, or `Set-ExecutionPolicy -Scope Process Bypass`.
 - Windows bootstrap packages: [windows-bootstrap-packages.md](windows-bootstrap-packages.md) — every item's WinGet ID, silent arguments, verification, and cleanup policy.
-- Windows RIME: `pwsh.exe -NoProfile -File .\windows\install.ps1` on Windows 11 x64; `bootstrap.sh` dispatches only from Windows MINGW/MSYS/Cygwin.
+- Windows RIME: direct entrypoint `pwsh.exe -NoProfile -File .\windows\install.ps1` on Windows 11 x64; the unified bootstrap runs it for the Mint step.
 - Agent guidelines: [AGENTS.md](../AGENTS.md)
 - macOS sandbox tests: `./tests/integration.sh`
 - Windows portable tests: `pwsh -NoProfile -File .\tests\windows\run.ps1`; they are not Windows-native acceptance.

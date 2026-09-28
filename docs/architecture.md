@@ -137,7 +137,7 @@ Normal output reports the install plan, package/apply/verify stages, warnings, a
 
 ## Windows bootstrap pipeline
 
-`windows-bootstrap/install.ps1` is an independent lifecycle, not a subcommand of `install.sh`. It supports Windows PowerShell 5.1 and PowerShell 7 on Windows 11 x64.
+`windows-bootstrap/install.ps1` is an independent lifecycle, not a subcommand of `install.sh`. It supports Windows PowerShell 5.1 and PowerShell 7 on Windows 11 x64. The unified `bootstrap.sh` forwards Windows Git Bash/MSYS2/Cygwin to this entry (PowerShell 7 when available, Windows PowerShell 5.1 otherwise); macOS still delegates to `install.sh`, and Linux/WSL is rejected.
 
 ```mermaid
 flowchart TD
