@@ -53,7 +53,7 @@
 | Base | `base.json` | Git、lazygit、PowerShell 7、Windows Terminal |
 | Core | `core.json` | WSL 2 + Ubuntu LTS、JetBrains Mono Nerd Font、Mint RIME、Mint 默认输入法、PowerShell profile |
 | Fonts | `fonts.json` | 固定版本 JetBrains Mono Nerd Font（URL、SHA-256、file pattern） |
-| Optional | `optional.json` | 14 个 WinGet/Microsoft Store 项（Obsidian、Typora、Thunderbird、Telegram、Steam、CC-Switch、Clash Verge Rev、Zen Browser、Raycast、百度网盘、夸克网盘、Geek Uninstaller、欧路词典、Visual Studio Code）与固定直链的 dwall |
+| Optional | `optional.json` | 15 个 WinGet/Microsoft Store 项（Obsidian、Typora、Thunderbird、Telegram、Steam、CC-Switch、Clash Verge Rev、Zen Browser、Raycast、百度网盘、夸克网盘、Geek Uninstaller、欧路词典、Visual Studio Code、PyCharm Community Edition）与固定直链的 dwall |
 
 每个 WinGet 项必须声明明确的 package ID 与静默参数。没有可靠静默安装或验证方式的项保持 `manual_required`；绝不模拟 GUI 操作。逐项参考：[Windows bootstrap 软件清单](windows-bootstrap-packages.zh-CN.md)。
 

@@ -206,6 +206,22 @@
       "locationSupport": "inno",
       "locationProbe": "Code.exe",
       "cleanupMode": "winget-uninstall-if-new"
+    },
+    {
+      "name": "PyCharm Community Edition",
+      "mode": "winget",
+      "wingetId": "JetBrains.PyCharm.Community",
+      "version": "winget-latest-stable",
+      "architecture": "x64",
+      "silentInstallArgs": ["--silent", "--accept-source-agreements", "--accept-package-agreements", "--disable-interactivity", "--scope", "machine"],
+      "uninstallCommand": {"type": "winget", "args": ["uninstall", "--id", "{wingetId}", "--exact", "--silent", "--accept-source-agreements", "--disable-interactivity"]},
+      "source": "winget:JetBrains.PyCharm.Community",
+      "checksum": "winget-source-signed",
+      "verification": {"type": "winget-list", "command": "JetBrains.PyCharm.Community", "args": [], "expected": "installed in winget list"},
+      "installLocation": "D:\\Program Files\\JetBrains\\PyCharm Community Edition",
+      "locationSupport": "nsis",
+      "locationProbe": "bin\\pycharm64.exe",
+      "cleanupMode": "winget-uninstall-if-new"
     }
   ]
 }

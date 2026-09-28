@@ -13,9 +13,10 @@ This record separates evidence from claims. `/init` and PowerShell Direct were u
 - PowerShell 7: `7.6.6`, x64. Windows PowerShell: `5.1.26100.7920`/`5.1.26100.9549` observations during acceptance. Guest process ran elevated as `WINBOOTTEST\tester`.
 - Git, WinGet, Windows Terminal, WSL, and Weasel runtime were present in the guest fixture.
 - Current synced source hashes recorded on the guest:
-  - `windows-bootstrap/lib/Bootstrap.Core.ps1`: `C33BC61E17B60FF123BACC56AA6ACADF6C58433AFD4EE47D15F95F17B4C361C7`
-  - `windows-bootstrap/install.ps1`: `8462487EC910C917CDCCA16A87B7D4B2144F76E4DA9E4CFDDD9082539C6FDAA7`
-  - `windows-bootstrap/tests/run.ps1`: `7A285B33E144167A9331597876FC3867DCF6560FBB5D985268BD93A3A8A043A3`
+  - `windows-bootstrap/lib/Bootstrap.Core.ps1`: `D2B8C03A7519E322DA226461C63D5E1F328E293D63FACF60C3C6DC8E0981E749`
+  - `windows-bootstrap/install.ps1`: `5DC98046A2DF696154D701106D2765B4CDAC452A88C1705FB1FEC750C9DC540A`
+  - `windows-bootstrap/tests/run.ps1`: `F08279C3486452A5EB00B3647930B1D89D722F4A1527077CD08EA0A9872D3D65`
+  - `windows-bootstrap/packages/optional.json`: `017E563F2FD6E71E644B31344C26BA85D335419B492ECD732D6D0BB3AEF6DA00`
 - Font manifest SHA-256: `fab782a66f7d3019da64f6572db9fc5d3a4bcb19f9fa13e2d8a62e3693d6396e`.
 
 ## Static and portable gates
@@ -113,6 +114,15 @@ A fresh `-Profile Optional` run in the same disposable guest finished with 14 `c
 - The same attempt exposed an unbounded WinGet hang; `Invoke-BootstrapExternal` enforces timeouts (900 s install, 300 s uninstall) and kills the process tree on timeout.
 - The follow-up run after Spotify and PotPlayer were removed from `optional.json` (14 items: 13 WinGet/Microsoft Store plus dwall) finished with 18 `completed` results and no `failed` or `manual_required` entries; `final-verification` completed. Artifacts: `report-optional-final.json` / `state-optional-final.json`.
 - In the earlier run, `final-verification` had reported only the WSL gap (`manual_required`) for the Optional-only scope.
+
+### D-drive package additions (2026-09-28)
+
+The current source was synced into the same disposable guest and exercised through a cold `-Profile Optional` run after removing the prior manual test install:
+
+- `Microsoft.VisualStudioCode` completed with `before=false`; `attemptedLocation` and `actualLocation` both resolved to `D:\Program Files\Microsoft VS Code`; `Code.exe` was present on D: and absent on C:.
+- `JetBrains.PyCharm.Community` version `2025.2.6.1` completed with `before=false`; `attemptedLocation` and `actualLocation` both resolved to `D:\Program Files\JetBrains\PyCharm Community Edition`; `bin\pycharm64.exe` was present on D: and absent on C:.
+- The complete run reported `failed=0`, `failed_uncleaned=0`, and `manual_required=[]`. The current package set contains 15 WinGet/Microsoft Store entries plus pinned-download `dwall` in `optional.json` (16 optional entries, 25 manifest items across Base/Core/Optional).
+- Evidence: `bootstrap/d-drive-verify/report-vscode.json`, `bootstrap/d-drive-verify/report-pycharm.json`, and the updated `bootstrap/d-drive-verify/README.md`; bundle `SHA256SUMS` verification passed.
 
 ## RIME Track A and native safety evidence
 
