@@ -108,11 +108,11 @@ A fresh `-Profile Optional` run in the same disposable guest finished with 14 `c
 
 - Installed and verified by the bootstrap: Obsidian, Typora (`appmakes.Typora`), Thunderbird, Telegram, Steam, CC-Switch, Clash Verge Rev, Zen Browser, Raycast (Microsoft Store), Baidu Netdisk, Quark Netdisk, Geek Uninstaller, Eudic, and dwall; the new base item lazygit passed the per-item probe.
 - `Typora.Typora` no longer exists in the WinGet source; the manifest now pins `appmakes.Typora`.
-- `Spotify.Spotify` refuses an administrator context and the Microsoft Store package is unavailable in the guest, so Spotify is `manual_required`.
-- `Daum.PotPlayer` stalls in its interactive installer even with `--override /S`, so PotPlayer is `manual_required`.
+- `Spotify.Spotify` refuses an administrator context and the Microsoft Store package is unavailable in the guest; `Daum.PotPlayer` stalls in its interactive installer even with `--override /S`. Both were removed from `optional.json` after this verification instead of staying as permanent `manual_required` entries.
 - dwall uses the new `download` mode: pinned `v0.2.5` installer URL plus `sha256:c448c0d28843523f6121d9edff7d03dd74f422b83f97d0de42b3087f3a182fee`, silent `/S`, and uninstall-registry verification. The first download-mode attempt failed as `failed_uncleaned` (exit 124): under Windows PowerShell 5.1 the argument builder quoted `/S` as `"/S"`, so NSIS never entered silent mode and the installer waited in its GUI. `ConvertTo-BootstrapProcessArgument` now quotes only when required.
 - The same attempt exposed an unbounded WinGet hang; `Invoke-BootstrapExternal` enforces timeouts (900 s install, 300 s uninstall) and kills the process tree on timeout.
-- The `final-verification` step reported only the WSL gap (`manual_required`) for this Optional-only run.
+- The follow-up run after Spotify and PotPlayer were removed from `optional.json` (14 items: 13 WinGet/Microsoft Store plus dwall) finished with 18 `completed` results and no `failed` or `manual_required` entries; `final-verification` completed. Artifacts: `report-optional-final.json` / `state-optional-final.json`.
+- In the earlier run, `final-verification` had reported only the WSL gap (`manual_required`) for the Optional-only scope.
 
 ## RIME Track A and native safety evidence
 

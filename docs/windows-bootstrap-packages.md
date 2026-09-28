@@ -84,12 +84,7 @@ WinGet items — same silent arguments, verify via `winget list`, cleanup `winge
 | --- | --- | --- | --- | --- | --- | --- |
 | dwall | 0.2.5 | `https://github.com/dwall-rs/dwall/releases/download/v0.2.5/Dwall.Settings_0.2.5_x64-setup.exe` | `sha256:c448c0d28843523f6121d9edff7d03dd74f422b83f97d0de42b3087f3a182fee` | `/S` | uninstall-registry entry `Dwall Settings` | download-uninstall-if-new |
 
-`manual_required` items — never installed automatically; the report carries the verified reason:
-
-| Item | Reason |
-| --- | --- |
-| Spotify | The WinGet source installer refuses an administrator context and the Microsoft Store package is unavailable in the test environment; install manually as the interactive user |
-| PotPlayer | WinGet silent install stalls in the interactive installer (verified with the default switches and `--override /S`) |
+No `manual` items remain. The mode stays supported for future entries that cannot be pinned.
 
 ## Changing the manifests
 

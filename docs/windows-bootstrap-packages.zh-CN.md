@@ -84,12 +84,7 @@ WinGet 项 — 相同静默参数，用 `winget list` 验证，清理 `winget-un
 | --- | --- | --- | --- | --- | --- | --- |
 | dwall | 0.2.5 | `https://github.com/dwall-rs/dwall/releases/download/v0.2.5/Dwall.Settings_0.2.5_x64-setup.exe` | `sha256:c448c0d28843523f6121d9edff7d03dd74f422b83f97d0de42b3087f3a182fee` | `/S` | 卸载注册表项 `Dwall Settings` | download-uninstall-if-new |
 
-`manual_required` 项——绝不自动安装，报告逐项记录经验证的原因：
-
-| 项目 | 原因 |
-| --- | --- |
-| Spotify | WinGet 源安装器拒绝在管理员上下文运行，且测试环境无 Microsoft Store 包；请以交互用户手动安装 |
-| PotPlayer | WinGet 静默安装会挂在交互式安装器上（默认参数与 `--override /S` 均已验证） |
+已无 `manual` 项；该模式仍保留给将来无法固定的条目。
 
 ## 修改清单
 

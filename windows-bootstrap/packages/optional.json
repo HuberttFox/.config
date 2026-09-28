@@ -59,19 +59,6 @@
       "cleanupMode": "winget-uninstall-if-new"
     },
     {
-      "name": "Spotify",
-      "mode": "manual",
-      "version": "manual-review",
-      "architecture": "x64",
-      "silentInstallArgs": [],
-      "uninstallCommand": {"type": "manual", "args": []},
-      "source": "manual-only",
-      "checksum": "manual-review-required",
-      "verification": {"type": "manual", "command": "", "args": [], "expected": "user confirms installation and version"},
-      "cleanupMode": "manual",
-      "reason": "The WinGet source installer refuses an administrator context and the Microsoft Store package is unavailable in the test environment; install manually as the interactive user."
-    },
-    {
       "name": "Steam",
       "mode": "winget",
       "wingetId": "Valve.Steam",
@@ -84,19 +71,6 @@
       "verification": {"type": "command", "command": "steam.exe", "args": []},
       "verifyCommand": "steam.exe",
       "cleanupMode": "winget-uninstall-if-new"
-    },
-    {
-      "name": "PotPlayer",
-      "mode": "manual",
-      "version": "manual-review",
-      "architecture": "x64",
-      "silentInstallArgs": [],
-      "uninstallCommand": {"type": "manual", "args": []},
-      "source": "manual-only",
-      "checksum": "manual-review-required",
-      "verification": {"type": "manual", "command": "", "args": [], "expected": "user confirms installation and version"},
-      "cleanupMode": "manual",
-      "reason": "WinGet silent install stalls in the interactive installer (verified with the default switches and --override /S); there is no reliable unattended contract."
     },
     {
       "name": "CC-Switch",
