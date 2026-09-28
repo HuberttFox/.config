@@ -42,6 +42,10 @@ Bootstrap rules:
 - Mutating operations (`Run`/`Resume`/`Verify`/`CleanupFailed`) request UAC
 elevation automatically when the window is not elevated; `-DryRun` and
   `-Report` never elevate; `-NoElevate` disables the relaunch.
+- Per-component progress lines and a `Write-Progress` bar are standard; long
+  child output streams into `logs\bootstrap.log` and the report carries
+  `logPath`. `-Quiet`/`-NoProgress` reduce console output; `-PassThru` stdout
+  stays JSON-only.
 - Component failures continue the run; outcomes are explicit (`completed`,
   `failed`, `failed_uncleaned`, `recovery_required`, `manual_required`).
 - Lock paths may remain after a run; live handle exclusivity is the contract,

@@ -14,6 +14,8 @@ Git Bash/MSYS2/Cygwin 下的统一入口 `./bootstrap.sh` 会转发到这里（�
 
 管理员权限：`Run`/`Resume`/`Verify`/`CleanupFailed` 需要管理员。若在非管理员窗口启动，脚本会立即通过 UAC 重新启动自身（保留原参数）并透传退出码；已在管理员窗口时静默执行，不重复弹窗。`-DryRun` 与 `-Report` 是只读操作，不提权；`-NoElevate` 可关闭自动提权（沿用原来的 `Administrator privileges are required` 报错）。
 
+运行反馈：每个组件打印 `[i/N] 名称 ...` 与 `[i/N] 名称 - 状态 (耗时)`；交互终端会同步显示 `Write-Progress` 进度条。长任务（winget 下载、dwall 安装器、RIME/Weasel 部署）的子进程输出会实时写入 `<StateRoot>\logs\bootstrap.log`，报告里带 `logPath`。`-Quiet` 只保留日志（不打印进度行），`-NoProgress` 关闭进度条但保留文本行；`-PassThru` 时 stdout 保持纯 JSON。
+
 ```batch
 :: 免执行策略启动（非管理员窗口会自动申请提权）
 .\windows-bootstrap\install.cmd -DryRun

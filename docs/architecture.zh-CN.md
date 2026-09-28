@@ -155,6 +155,7 @@ flowchart TD
 - 状态、报告、锁、备份与恢复任务都限定于本次运行；`-DryRun` 不创建这些文件，也不修改 Registry、profile、WSL 或输入法状态。
 - 组件结果是显式的：`completed`、`failed`、`failed_uncleaned`、`recovery_required`、`manual_required`。退出码 `1` 表示存在 failed 或 recovery_required；纯人工项运行退出 `0`。
 - Cleanup 只删除或恢复本次运行拥有且指纹匹配的路径；绝不删除未知软件、AppData 或注册表项。
+- 每个组件打印 `[i/N] 名称 - 状态 (耗时)` 并更新 `Write-Progress` 进度条；长任务子进程输出实时写入 `logs/bootstrap.log`，报告记录 `logPath`。`-Quiet` 只保留日志，`-NoProgress` 保留文本行但不要进度条。
 - 该生命周期的执行记录见 [验收证据](handoff-windows-rime-native-acceptance-evidence.md)。
 
 ## Windows 原生验收

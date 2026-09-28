@@ -46,11 +46,13 @@ function New-TestContext([string]$Name) {
     $runId = [guid]::NewGuid().ToString('N')
     $state = New-BootstrapState $stateRoot $runId 'Core' $false
     $report = New-BootstrapReport $stateRoot $runId 'Core' $false
+    $logPath = Join-Path $stateRoot 'bootstrap.log'
+    $report.logPath = $logPath
     return [pscustomobject]@{
         StateRoot = $stateRoot
         StatePath = Join-Path $stateRoot 'state.json'
         ReportPath = Join-Path $stateRoot 'report.json'
-        LogPath = Join-Path $stateRoot 'bootstrap.log'
+        LogPath = $logPath
         BackupRoot = $backupRoot
         TempRoot = $tempRoot
         RepoRoot = $script:RepoRoot
@@ -58,6 +60,8 @@ function New-TestContext([string]$Name) {
         RunId = $runId
         DryRun = $false
         Operation = 'Run'
+        Quiet = $false
+        Silent = $false
         State = $state
         Report = $report
         Lock = $null
@@ -135,6 +139,30 @@ try {
         Assert-Test (-not (Test-BootstrapElevationRequired $false 'Report' $false)) 'Report should not require elevation'
         Assert-Test (-not (Test-BootstrapElevationRequired $true 'Run' $false)) 'elevated sessions should not re-elevate'
         Assert-Test (-not (Test-BootstrapElevationRequired $false 'Run' $true)) 'NoElevate should suppress elevation'
+    }
+
+    Invoke-TestCase 'step progress lines report counter, status, and duration' {
+        $started = Format-BootstrapStepLine 3 14 'Mint RIME' '' 0
+        Assert-Test ($started -match '^\[3/14\] Mint RIME \.\.\.$') "unexpected start line: $started"
+        $finished = Format-BootstrapStepLine 3 14 'Mint RIME' 'completed' 12.34
+        Assert-Test ($finished -match '^\[3/14\] Mint RIME - completed \(12\.\ds\)$') "unexpected finish line: $finished"
+    }
+
+    Invoke-TestCase 'context report records the per-run log path' {
+        $context = New-TestContext 'log-path'
+        Assert-Test (-not [string]::IsNullOrWhiteSpace([string]$context.Report.logPath)) 'report logPath missing'
+        Assert-Equal ([string]$context.Report.logPath) ([string]$context.LogPath) 'report logPath does not match the context log'
+    }
+
+    Invoke-TestCase 'external output streams into the log file' {
+        if ([Environment]::OSVersion.Platform -eq 'Win32NT') {
+            $log = Join-Path $script:TestRoot 'stream.log'
+            $result = Invoke-BootstrapExternal 'powershell.exe' @('-NoProfile', '-Command', '1..3 | ForEach-Object { ''line'' + $_; Start-Sleep -Milliseconds 150 }') -TimeoutSeconds 60 -LogPath $log
+            Assert-Test ($result.ExitCode -eq 0) "streaming run exit code was $($result.ExitCode)"
+            $text = if (Test-Path -LiteralPath $log) { Get-Content -LiteralPath $log -Raw } else { '' }
+            Assert-Test ($text -match 'line1' -and $text -match 'line3') 'streamed log is missing child output'
+            Assert-Test ($result.Output -match 'line3') 'captured output is missing child output'
+        }
     }
 
     Invoke-TestCase 'elevated relaunch keeps the script path and bound parameters' {

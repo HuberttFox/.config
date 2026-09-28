@@ -15,7 +15,9 @@ param(
     [switch]$NoNetworkCheck,
     [switch]$PassThru,
     [switch]$Force,
-    [switch]$NoElevate
+    [switch]$NoElevate,
+    [switch]$Quiet,
+    [switch]$NoProgress
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -76,8 +78,13 @@ function Get-BootstrapOperation {
 function Invoke-BootstrapRun {
     $selected = if ($NoOptional -and $Profile -eq 'All') { 'Core' } else { $Profile }
     $operation = Get-BootstrapOperation
-    $context = New-BootstrapContext $StateRoot $selected ([bool]$DryRun) $operation $script:RepositoryRoot -Force:$Force
+    $context = New-BootstrapContext $StateRoot $selected ([bool]$DryRun) $operation $script:RepositoryRoot -Force:$Force -Quiet:$Quiet -Silent:([bool]$PassThru)
     $selected = [string]$context.State.profile
+    Write-BootstrapConsole $context ("Windows bootstrap: operation={0}, profile={1}" -f $operation, $selected)
+    if (-not $context.DryRun) {
+        Write-BootstrapConsole $context ("State: {0}" -f $context.StateRoot)
+        Write-BootstrapConsole $context ("Log:   {0}" -f $context.LogPath)
+    }
     if ($operation -eq 'Report') { return $context }
 
     Enter-BootstrapLock $context
@@ -176,14 +183,24 @@ function Invoke-BootstrapRun {
         $manifestDirectory = Join-Path $script:BootstrapRoot 'packages'
         $items = @(Get-BootstrapManifestItems $manifestDirectory (Get-BootstrapComponentFiles $selected ($selected -eq 'All' -and -not $NoOptional)))
         $context.State.phase = 'base'
+        $itemTotal = $items.Count
+        $itemIndex = 0
+        $progressEnabled = -not $context.DryRun -and -not [bool]$context.Quiet -and -not [bool]$context.Silent -and -not $NoProgress -and $ProgressPreference -ne 'SilentlyContinue'
         foreach ($item in $items) {
+            $itemIndex++
             if ($operation -eq 'Resume' -and (Test-BootstrapComponentStillComplete $context $item)) {
                 Write-BootstrapLog $context "Resume: verified completed component, skipping $($item.name)"
+                Write-BootstrapConsole $context (Format-BootstrapStepLine $itemIndex $itemTotal ([string]$item.name) 'skipped (already complete)' 0)
                 continue
             }
             if ($operation -eq 'Resume' -and ([string]$item.name -in @($context.State.completedComponents))) {
                 Write-BootstrapLog $context "Resume: completion record stale; rerunning $($item.name)" 'WARN'
             }
+            Write-BootstrapConsole $context (Format-BootstrapStepLine $itemIndex $itemTotal ([string]$item.name) '' 0)
+            if ($progressEnabled) {
+                Write-Progress -Activity 'Windows bootstrap' -Status ("[$itemIndex/$itemTotal] $($item.name)") -PercentComplete ([int](($itemIndex - 1) * 100 / [Math]::Max(1, $itemTotal)))
+            }
+            $stepStarted = Get-Date
             $mode = [string]$item.mode
             switch ($mode) {
                 'winget' {
@@ -215,11 +232,19 @@ function Invoke-BootstrapRun {
                 }
             }
             Save-BootstrapContext $context
+            $stepResult = Get-BootstrapLatestResult $context ([string]$item.name)
+            $stepSeconds = ((Get-Date) - $stepStarted).TotalSeconds
+            Write-BootstrapConsole $context (Format-BootstrapStepLine $itemIndex $itemTotal ([string]$item.name) ([string]$stepResult.status) $stepSeconds)
+            if ($progressEnabled) {
+                Write-Progress -Activity 'Windows bootstrap' -Status ("[$itemIndex/$itemTotal] $($item.name): $($stepResult.status)") -PercentComplete ([int]($itemIndex * 100 / [Math]::Max(1, $itemTotal)))
+            }
             if ([string]$context.State.phase -eq 'awaiting-reboot') {
+                if ($progressEnabled) { Write-Progress -Activity 'Windows bootstrap' -Completed }
                 Save-BootstrapContext $context
                 return $context
             }
         }
+        if ($progressEnabled) { Write-Progress -Activity 'Windows bootstrap' -Completed }
         $context.State.phase = 'verification'
         $context.State.nextPhase = 'completed'
         Add-BootstrapVerificationResult $context | Out-Null
@@ -266,9 +291,12 @@ try {
         if ($result.DryRun) { ConvertTo-BootstrapJsonText $result.Report }
         else { Get-Content -LiteralPath $result.ReportPath -Raw }
     } else {
-        Write-Host "Windows bootstrap state: $($result.State.phase)"
-        if ($result.DryRun) { Write-Host 'Report: dry-run only; no report file was written' }
-        else { Write-Host "Report: $($result.ReportPath)" }
+        Write-BootstrapConsole $result "Windows bootstrap state: $($result.State.phase)"
+        if ($result.DryRun) { Write-BootstrapConsole $result 'Report: dry-run only; no report file was written' }
+        else {
+            Write-BootstrapConsole $result "Report: $($result.ReportPath)"
+            Write-BootstrapConsole $result "Log:    $($result.LogPath)"
+        }
     }
     $reportObject = if ($result.DryRun) { $result.Report } else { Read-BootstrapJson $result.ReportPath }
     if ($null -ne $reportObject -and (@($reportObject.failed).Count -gt 0 -or @($reportObject.failedCleaned).Count -gt 0 -or @($reportObject.failedUncleaned).Count -gt 0 -or @($reportObject.recoveryRequired).Count -gt 0)) { exit 1 }

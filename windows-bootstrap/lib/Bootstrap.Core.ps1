@@ -169,6 +169,7 @@ function New-BootstrapReport([string]$StateRoot, [string]$RunId, [string]$Select
         stateRoot = $StateRoot
         profile = $SelectedProfile
         dryRun = $DryRun
+        logPath = $null
         host = $null
         results = @()
         success = @()
@@ -217,7 +218,7 @@ function Ensure-BootstrapReportShape($Report) {
             $property.Value = @()
         }
     }
-    foreach ($name in @('host', 'finishedAt', 'requiresReboot', 'resumeTask')) {
+    foreach ($name in @('host', 'finishedAt', 'requiresReboot', 'resumeTask', 'logPath')) {
         if ($null -eq $Report.PSObject.Properties[$name]) {
             $default = if ($name -eq 'requiresReboot') { $false } else { $null }
             $Report | Add-Member -NotePropertyName $name -NotePropertyValue $default
@@ -262,7 +263,9 @@ function New-BootstrapContext(
     [ValidateSet('Run', 'Resume', 'Verify', 'Report', 'Cleanup')]
     [string]$Operation,
     [string]$RepoRoot,
-    [switch]$Force
+    [switch]$Force,
+    [switch]$Quiet,
+    [switch]$Silent
 ) {
     if ([string]::IsNullOrWhiteSpace($StateRoot)) { $StateRoot = Get-BootstrapDefaultStateRoot }
     $StateRoot = [IO.Path]::GetFullPath($StateRoot)
@@ -338,11 +341,16 @@ function New-BootstrapContext(
     } else {
         [IO.Path]::GetFullPath($RepoRoot)
     }
+    $logPath = Join-Path $logDirectory 'bootstrap.log'
+    if ($null -ne $report) {
+        if ($null -ne $report.PSObject.Properties['logPath']) { $report.logPath = $logPath }
+        else { $report | Add-Member -NotePropertyName 'logPath' -NotePropertyValue $logPath }
+    }
     return [pscustomobject]@{
         StateRoot = $StateRoot
         StatePath = $statePath
         ReportPath = $reportPath
-        LogPath = Join-Path $logDirectory 'bootstrap.log'
+        LogPath = $logPath
         BackupRoot = $backupDirectory
         TempRoot = $tempDirectory
         RepoRoot = $resolvedRepoRoot
@@ -350,6 +358,8 @@ function New-BootstrapContext(
         RunId = $runId
         DryRun = $DryRun
         Operation = $Operation
+        Quiet = [bool]$Quiet
+        Silent = [bool]$Silent
         State = $state
         Report = $report
         Lock = $null
@@ -362,6 +372,18 @@ function Write-BootstrapLog($Context, [string]$Message, [string]$Level = 'INFO')
     if (-not $Context.DryRun) {
         try { Add-Content -LiteralPath $Context.LogPath -Value $line -Encoding UTF8 } catch { }
     }
+}
+
+function Write-BootstrapConsole($Context, [string]$Message) {
+    if ([bool](Get-BootstrapObjectProperty $Context 'Quiet')) { return }
+    if ([bool](Get-BootstrapObjectProperty $Context 'Silent')) { return }
+    Write-Host $Message
+}
+
+function Format-BootstrapStepLine([int]$Index, [int]$Total, [string]$Name, [string]$Status, [double]$Seconds) {
+    $counter = if ($Total -gt 0) { '[' + $Index + '/' + $Total + ']' } else { '[' + $Index + ']' }
+    if ([string]::IsNullOrWhiteSpace($Status)) { return ($counter + ' ' + $Name + ' ...') }
+    return ('{0} {1} - {2} ({3:n1}s)' -f $counter, $Name, $Status, $Seconds)
 }
 
 function Save-BootstrapContext($Context) {
@@ -573,14 +595,78 @@ function Stop-BootstrapProcessTree($Process) {
     try { & taskkill.exe /T /F /PID $processId 2>&1 | Out-Null } catch { }
 }
 
-function Invoke-BootstrapExternal([string]$FilePath, [string[]]$Arguments, [int]$TimeoutSeconds = 0) {
+function Copy-BootstrapStreamDelta([string]$Path, [int]$Position, [string]$LogPath, [bool]$Final = $false) {
+    if ([string]::IsNullOrWhiteSpace($LogPath)) { return $Position }
+    $text = ''
+    try { $text = [IO.File]::ReadAllText($Path) } catch { return $Position }
+    if ($text.Length -le $Position) { return $Position }
+    $limit = $text.Length
+    if (-not $Final) {
+        $lastNewline = $text.LastIndexOf("`n")
+        if ($lastNewline -lt 0) { return $Position }
+        $limit = $lastNewline + 1
+    }
+    if ($limit -le $Position) { return $Position }
+    $delta = $text.Substring($Position, $limit - $Position)
+    foreach ($line in @($delta -split "`r?`n")) {
+        $clean = ConvertTo-BootstrapSafeText $line
+        if ([string]::IsNullOrWhiteSpace($clean)) { continue }
+        try { Add-Content -LiteralPath $LogPath -Value $clean -Encoding UTF8 } catch { }
+    }
+    return $limit
+}
+
+function Invoke-BootstrapExternalStreaming([string]$FilePath, [string[]]$Arguments, [int]$TimeoutSeconds, [string]$LogPath) {
+    # Redirect to temp files and tail them while the child runs, so long
+    # installers (winget, Weasy/Dwall setup) leave a live trail in the log.
+    $stdoutFile = [IO.Path]::GetTempFileName()
+    $stderrFile = [IO.Path]::GetTempFileName()
+    $argumentText = (@($Arguments) | ForEach-Object { ConvertTo-BootstrapProcessArgument ([string]$_) }) -join ' '
+    $process = $null
+    try {
+        $process = Start-Process -FilePath $FilePath -ArgumentList $argumentText -PassThru -NoNewWindow -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile -ErrorAction Stop
+        $stdoutPosition = 0
+        $stderrPosition = 0
+        $timedOut = $false
+        $deadline = if ($TimeoutSeconds -gt 0) { (Get-Date).AddSeconds($TimeoutSeconds) } else { $null }
+        while (-not $process.HasExited) {
+            $stdoutPosition = Copy-BootstrapStreamDelta $stdoutFile $stdoutPosition $LogPath
+            $stderrPosition = Copy-BootstrapStreamDelta $stderrFile $stderrPosition $LogPath
+            if ($null -ne $deadline -and (Get-Date) -gt $deadline) { $timedOut = $true; Stop-BootstrapProcessTree $process; break }
+            Start-Sleep -Milliseconds 300
+        }
+        try { $process.WaitForExit() } catch { }
+        $stdoutPosition = Copy-BootstrapStreamDelta $stdoutFile $stdoutPosition $LogPath $true
+        $stderrPosition = Copy-BootstrapStreamDelta $stderrFile $stderrPosition $LogPath $true
+        $stdout = ''
+        $stderr = ''
+        try { $stdout = [IO.File]::ReadAllText($stdoutFile) } catch { }
+        try { $stderr = [IO.File]::ReadAllText($stderrFile) } catch { }
+        $parts = @()
+        if (-not [string]::IsNullOrEmpty($stdout)) { $parts += $stdout }
+        if (-not [string]::IsNullOrEmpty($stderr)) { $parts += $stderr }
+        $exitCode = if ($timedOut) { 124 } else { [int]$process.ExitCode }
+        if ($timedOut) { $parts += "Timed out after $TimeoutSeconds seconds" }
+        return [pscustomobject]@{ ExitCode = $exitCode; Output = (ConvertTo-BootstrapSafeText (($parts | ForEach-Object { [string]$_ }) -join [Environment]::NewLine)) }
+    } finally {
+        if ($null -ne $process) { $process.Dispose() }
+        Remove-Item -LiteralPath $stdoutFile, $stderrFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Invoke-BootstrapExternal([string]$FilePath, [string[]]$Arguments, [int]$TimeoutSeconds = 0, [string]$LogPath = '') {
     # wsl.exe writes redirected streams as UTF-16LE. Direct invocation lets the
     # host shell decode those bytes with its native-command code page, producing
     # NUL padding or corrupted diagnostics. Use explicit stream encoding only
     # for WSL; retain normal PowerShell native invocation for other tools.
     # A positive TimeoutSeconds forces the redirected path so a stalled
     # installer can be killed instead of blocking the whole run.
-    $useProcess = ([IO.Path]::GetFileName($FilePath) -ieq 'wsl.exe') -or $TimeoutSeconds -gt 0
+    $isWsl = [IO.Path]::GetFileName($FilePath) -ieq 'wsl.exe'
+    $streaming = (-not $isWsl) -and (-not [string]::IsNullOrWhiteSpace($LogPath))
+    $useProcess = $isWsl -or $TimeoutSeconds -gt 0 -or $streaming
+    if ($streaming) {
+        return Invoke-BootstrapExternalStreaming $FilePath $Arguments $TimeoutSeconds $LogPath
+    }
     if ($useProcess) {
         $startInfo = New-Object Diagnostics.ProcessStartInfo
         $startInfo.FileName = $FilePath
@@ -706,7 +792,7 @@ function Invoke-BootstrapWingetInstall($Context, $Item, [string]$Winget) {
     foreach ($argument in @($Item.silentInstallArgs)) {
         if (-not [string]::IsNullOrWhiteSpace([string]$argument)) { $args += [string]$argument }
     }
-    $result = Invoke-BootstrapExternal $Winget $args -TimeoutSeconds 900
+    $result = Invoke-BootstrapExternal $Winget $args -TimeoutSeconds 900 -LogPath $Context.LogPath
     Write-BootstrapLog $Context ("winget $($Item.wingetId): $($result.Output)")
     if ($result.ExitCode -eq 0 -and (Test-BootstrapWingetInstalled $Winget ([string]$Item.wingetId))) {
         $Context.State.installedPackages = @($Context.State.installedPackages) + [pscustomobject]@{ id = $Item.wingetId; name = $Item.name; before = $false; at = [DateTime]::UtcNow.ToString('o') }
@@ -724,7 +810,7 @@ function Invoke-BootstrapWingetInstall($Context, $Item, [string]$Winget) {
                 if (-not [string]::IsNullOrWhiteSpace([string]$argument)) { $removeArgs += ([string]$argument -replace '\{wingetId\}', [string]$Item.wingetId) }
             }
         }
-        $remove = Invoke-BootstrapExternal $Winget $removeArgs -TimeoutSeconds 300
+        $remove = Invoke-BootstrapExternal $Winget $removeArgs -TimeoutSeconds 300 -LogPath $Context.LogPath
         $cleanup = if ($remove.ExitCode -eq 0 -and -not (Test-BootstrapWingetInstalled $Winget ([string]$Item.wingetId))) { 'removed' } else { 'incomplete' }
         $Context.State.cleanup = @($Context.State.cleanup) + [pscustomobject]@{ name = $Item.name; action = 'winget-uninstall'; status = $cleanup }
         Save-BootstrapContext $Context
@@ -1116,7 +1202,7 @@ function Uninstall-BootstrapDownloadedApp($Context, $Item) {
     foreach ($argument in @($Item.uninstallCommand.args)) {
         if (-not [string]::IsNullOrWhiteSpace([string]$argument) -and -not ($arguments -contains [string]$argument)) { $arguments += [string]$argument }
     }
-    $result = Invoke-BootstrapExternal $parsed.Executable $arguments -TimeoutSeconds 300
+    $result = Invoke-BootstrapExternal $parsed.Executable $arguments -TimeoutSeconds 300 -LogPath $Context.LogPath
     Start-Sleep -Seconds 3
     if ($null -ne (Get-BootstrapUninstallEntry $displayName)) {
         return [pscustomobject]@{ status = 'failed'; message = "Uninstall did not remove $displayName (exit $($result.ExitCode))"; details = @{ output = $result.Output; entry = $entry } }
@@ -1162,7 +1248,7 @@ function Install-BootstrapDownloadApp($Context, $Item) {
     foreach ($argument in @($Item.silentInstallArgs)) {
         if (-not [string]::IsNullOrWhiteSpace([string]$argument)) { $arguments += [string]$argument }
     }
-    $result = Invoke-BootstrapExternal $file $arguments -TimeoutSeconds 900
+    $result = Invoke-BootstrapExternal $file $arguments -TimeoutSeconds 900 -LogPath $Context.LogPath
     # Tauri/NSIS registration can land slightly after the installer process
     # exits; poll instead of relying on a single fixed sleep.
     $entry = $null
@@ -1296,7 +1382,7 @@ function Invoke-BootstrapRime($Context, [switch]$SkipRime) {
     }
     $startedAt = [DateTime]::UtcNow
     $args = @('-NoProfile','-File',$script,'-Profiles','mint','-InitialProfile','mint','-DeployMode','Quiet','-RimeRoot',$rimeRoot,'-CacheDirectory',$cache,'-NoRaycast','-PassThru')
-    $result = Invoke-BootstrapExternal $pwsh $args
+    $result = Invoke-BootstrapExternal $pwsh $args -LogPath $Context.LogPath
     Write-BootstrapLog $Context ("Mint RIME: $($result.Output)")
     $reportHash = $null
     $report = $null
