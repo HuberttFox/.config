@@ -13,7 +13,7 @@ Every manifest item must define the full contract below, or the installer throws
 | Field | Purpose |
 | --- | --- |
 | `name` | Component name used in state and report |
-| `mode` | `winget`, `download`, `wsl`, `font`, `rime`, `input-method`, `powershell-profile`, or `manual` |
+| `mode` | `winget`, `download`, `portable-handoff`, `wsl`, `font`, `rime`, `input-method`, `powershell-profile`, or `manual` |
 | `version` | Version policy (`winget-latest-stable`, a pinned release, or `manual-review`) |
 | `architecture` | `x64` or `all` |
 | `silentInstallArgs` | Array of non-interactive arguments |
@@ -21,15 +21,17 @@ Every manifest item must define the full contract below, or the installer throws
 | `source` | Where the package comes from |
 | `checksum` | Integrity/verification policy |
 | `verification` | `{ type, ... }` verification metadata |
-| `wingetId` | Required when `mode: winget` |
+| `wingetId` | Required when `mode: winget`; retained as reference metadata for a controlled portable handoff |
 | `wingetSource` | Optional WinGet source override: `winget` (default) or `msstore` |
-| `url` | Required for `mode: download`; exact HTTPS installer URL |
+| `url` | Required for `mode: download` and `mode: portable-handoff`; exact HTTPS artifact URL |
 | `installerType` | Metadata only (`nsis`, `inno`, ...); the silent switches live in `silentInstallArgs` |
 | `installLocation` | Preferred absolute install directory (e.g. `D:\Program Files\Git`); used with WinGet `--location` when the drive policy prefers D: |
 | `locationSupport` | `inno`, `msi`, `nsis`, `exe`, `portable`, or `none`; `none` disables `--location` for the item |
 | `locationProbe` | Relative file checked under the attempted and fallback directories to report the actual location |
 | `cleanupMode` | `winget-uninstall-if-new`, `owned-files-only`, `backup-restore`, or `manual` |
-| `reason` | Required for `manual` items; recorded in the report |
+| `executionContext` | `elevated` (default) or `user`; user-scoped items run before UAC and are imported through a SID/run-ID-bound handoff |
+| `portableDirectory` | Required for `portable-handoff`; safe relative directory under `-PortableAppsRoot` |
+| `reason` | Required for `manual` items; portable-handoff reasons describe the non-automated GUI boundary |
 
 Mode behavior:
 
@@ -37,7 +39,9 @@ Mode behavior:
 - Failure cleanup — when an install fails after the package became registered, `cleanupMode: winget-uninstall-if-new` removes it immediately; the component result is `failed_cleaned` if removal succeeded, otherwise `failed_uncleaned`.
 - Timeout — WinGet installs and uninstalls run under bounded timeouts (900 s install, 300 s uninstall). A stalled process tree is killed and recorded as a failure instead of blocking the run.
 - `download` — pinned direct download. The installer runs with `silentInstallArgs` under a 900 s timeout, then the component polls the uninstall registry for up to 60 s. On failure, `cleanupMode: download-uninstall-if-new` runs the registered uninstaller; an incomplete attempt is kept in the failed list so `-CleanupFailed` can retry.
+- `portable-handoff` — normal-user phase downloads the pinned HTTPS PortableApps artifact, checks SHA-256, and records `manual_required`. It never invokes an unverified silent switch. `-LaunchPortableHandoff -PortableAppsRoot <root>` explicitly opens the verified interactive installer; after the user finishes it, `-ConfirmPortableHandoff -PortableAppsRoot <root>` requires the expected launcher and core executable before a `completed` result is possible. Download cache is under the current user's `%LOCALAPPDATA%\WindowsBootstrap\UserPhase\<runId>` and cleanup never removes the selected PortableApps destination.
 - `manual` — nothing is installed or downloaded. The item is recorded as `manual_required` with its `reason`, and the run continues.
+- Normal-user phase — a non-elevated `Run`/`Resume` first runs only manifest items with `executionContext: user`, then starts the administrator child. The source phase must be non-admin, session ≥1, and Medium Mandatory Level; the handoff root and file must have protected owner-and-SYSTEM-only DACLs. The child requires the current SID, run ID, profile, fresh timestamp, exact result set, and a canonical SHA-256 fingerprint of every selected manifest item, then live-verifies Spotify with `winget list` before recording success. Starting already elevated cannot downgrade its token, so user-context items remain `manual_required` rather than being run incorrectly.
 - Non-WinGet modes are executed by dedicated bootstrap functions (WSL, font, RIME bridge, input method, managed profiles).
 
 Post-run `final-verification` checks `git.exe`, `pwsh.exe`, `wt.exe`, a live WSL 2 Ubuntu, the managed PowerShell profile block, and live completion for the Font, Mint RIME, input-method, and profile components.
@@ -91,21 +95,35 @@ WinGet items — same silent arguments, verify via `winget list`, cleanup `winge
 | Quicker | `LiErHeXun.Quicker` |
 | PixPin | `PixPin.PixPin` |
 | Geek Uninstaller | `GeekUninstaller.GeekUninstaller` |
+| Spotify | `Spotify.Spotify` — normal-user phase only, `--scope user` |
 
-## Manual items
+## Normal-user special items
 
-| Item | WinGet ID | Status | Reason |
+| Item | Mode / source | Default result | Completion boundary |
 | --- | --- | --- | --- |
-| PotPlayer | `Daum.PotPlayer` | `manual_required` | The installer timed out in the guest with `/S` and override arguments; no reliable unattended contract. |
-| Spotify | `Spotify.Spotify` | `manual_required` | The WinGet installer refuses an administrator context; no usable Microsoft Store alternative was available in the guest. |
+| Spotify | `winget:Spotify.Spotify`, `--scope user` | `completed` only after normal-user install and elevated `winget list` recheck | Must begin from a normal, medium-integrity desktop terminal. The WinGet installer rejects an administrator token. |
+| PotPlayer | `portable-handoff`, PortableApps.com `PotPlayerPortable_1.7.22980.paf.exe` | `manual_required` after download + SHA-256 check | No silent extraction is claimed. User explicitly launches the verified GUI installer, chooses a destination below `-PortableAppsRoot`, then explicitly confirms a launcher/core-EXE layout check. |
+
+PotPlayer's official `Daum.PotPlayer` WinGet/NSIS route remains excluded from automation: guest testing stalled with `/S` and override arguments. The PortableApps.com page states that its package is made with publisher permission and publishes SHA-256 `9c6b0364be94af7bbd117dd05df7485dfd965ee8785e44af6a0129c745f21913`; the bootstrap pins both the direct HTTPS URL and that hash. This is a controlled interactive handoff, not a claim of first-party portable distribution or unattended installation.
+
+Commands for the explicit PotPlayer handoff (run from a normal, non-elevated desktop terminal):
+
+```powershell
+# Download and verify only; installer is not launched.
+.\windows-bootstrap\install.ps1 -Profile Optional -PortableAppsRoot 'D:\PortableApps'
+
+# Explicitly open verified GUI installer. Choose D:\PortableApps\PotPlayerPortable in its UI.
+.\windows-bootstrap\install.ps1 -Profile Optional -PortableAppsRoot 'D:\PortableApps' -LaunchPortableHandoff
+
+# After the installer exits, verify launcher/core files and record completion.
+.\windows-bootstrap\install.ps1 -Profile Optional -PortableAppsRoot 'D:\PortableApps' -ConfirmPortableHandoff
+```
 
 ## Pinned download item — `dwall`
 
 | Item | Version | URL | SHA-256 | Silent args | Verification | Cleanup |
 | --- | --- | --- | --- | --- | --- | --- |
 | dwall | 0.2.5 | `https://github.com/dwall-rs/dwall/releases/download/v0.2.5/Dwall.Settings_0.2.5_x64-setup.exe` | `sha256:c448c0d28843523f6121d9edff7d03dd74f422b83f97d0de42b3087f3a182fee` | `/S` | uninstall-registry entry `Dwall Settings` | download-uninstall-if-new |
-
-PotPlayer and Spotify remain explicit `manual_required` items: PotPlayer's current WinGet installer stalls even with `/S`, while Spotify refuses an administrator context. The mode stays supported for future entries that cannot be automated safely.
 
 ## Install location policy
 
@@ -116,6 +134,7 @@ Machine scope remains necessary for the Git, Visual Studio Code, and PyCharm ins
 ## Changing the manifests
 
 - Add every required contract field; `windows-bootstrap/tests/run.ps1` includes manifest-contract regression coverage (missing fields, unsupported architecture, missing WinGet ID).
-- Promote a `manual` item to `winget` after its package ID, silent install, verification, and silent uninstall are all pinned and tested; use `wingetSource: msstore` for Microsoft Store-only products.
+- Promote a `manual` item to `winget` after its package ID, silent install, verification, and silent uninstall are all pinned and tested; use `wingetSource: msstore` for Microsoft Store-only products. User-scope packages must declare `executionContext: user` and `--scope user`; do not try to reverse UAC from an elevated process.
 - Direct-download items require an HTTPS `url`, a `sha256:` checksum, a `registry-uninstall` uninstall contract, and an `uninstall-registry` verification display name; the suite covers the contract and command-line parsing.
+- A `portable-handoff` requires HTTPS, pinned SHA-256, `executionContext: user`, `uninstallCommand.type: manual`, a safe relative `portableDirectory`, and safe relative launcher/core-executable layout paths. It must not gain silent arguments unless a repeatable unattended installer contract is independently accepted.
 - Pinned release sources (like the font archive) must carry an exact URL and SHA-256; WinGet items rely on the WinGet source and signature checks.

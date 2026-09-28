@@ -1,7 +1,7 @@
 # Windows RIME / Bootstrap acceptance evidence
 
-Written: 2026-09-28 (UTC+08:00)
-Repository: `HuberttFox/.config`, merged to `main`
+Written: 2026-09-29 (UTC+08:00)
+Repository: `HuberttFox/.config`, `main` worktree
 Guest: `Win11BootstrapTest` / `WINBOOTTEST`
 Guest user: `WINBOOTTEST\tester`
 
@@ -12,11 +12,12 @@ This record separates evidence from claims. `/init` and PowerShell Direct were u
 - Windows edition reported by the guest: Windows 11 Pro, build `26200`, x64. The registry `ProductName` still reports `Windows 10 Pro`; the implementation accepts that label only with a Windows 11 build number and rejects Server products.
 - PowerShell 7: `7.6.6`, x64. Windows PowerShell: `5.1.26100.7920`/`5.1.26100.9549` observations during acceptance. Guest process ran elevated as `WINBOOTTEST\tester`.
 - Git, WinGet, Windows Terminal, WSL, and Weasel runtime were present in the guest fixture.
-- Current synced source hashes recorded on the guest:
-  - `windows-bootstrap/lib/Bootstrap.Core.ps1`: `F88AF6E0C68AAC349249A47FC7A106CCF0FDA5B3D310BBAB7C9D48CB78017273`
-  - `windows-bootstrap/install.ps1`: `5DC98046A2DF696154D701106D2765B4CDAC452A88C1705FB1FEC750C9DC540A`
-  - `windows-bootstrap/tests/run.ps1`: `455B36DB7EA98AB61CFA2F29A92FFA3F11CA5419F095063D40437A843FCF233E`
-  - `windows-bootstrap/packages/optional.json`: `9EC7247C0E4496A17EE69F290A2409E21BB32616ADE654841EE9818BE5B9B325`
+- Current production source hashes, recorded in the protected Spotify fixture's `fixture-source.json` and checked again in the current worktree:
+  - `windows-bootstrap/lib/Bootstrap.Core.ps1`: `42c49264a7b6ede444e13e6c78326314786c48a6636b6592bef685c9315a979f`
+  - `windows-bootstrap/install.ps1`: `1c4778424605418b32b0cdf74e20415c6a575b1794789ec245ac6dd108697017`
+  - `windows-bootstrap/tests/run.ps1`: `a48922a3a6334a1321a4d98a343cbf75d2ad5823188e9d1ce281546a274e9ba8`
+  - production `windows-bootstrap/packages/optional.json`: `3fa508c671ad71da771d9d559a5ab06860a4fa429c3839f9285572580204fdff`
+- The native Spotify fixture intentionally replaces only its selected Optional manifest with a Spotify-only copy (`edff08203ce2732e438e8de0ac22dad90b97e16210b061b03814cf3625f9a03f`) and uses empty Base/Core manifests. It proves normal-user provenance/UAC import behavior, not a full production Optional install.
 - Font manifest SHA-256: `fab782a66f7d3019da64f6572db9fc5d3a4bcb19f9fa13e2d8a62e3693d6396e`.
 
 ## Static and portable gates
@@ -30,6 +31,7 @@ Evidence retained under `F:\Win11BootstrapTest` (`/mnt/f/Win11BootstrapTest` on 
   Windows PowerShell 5.1 literal summary: `Tests: 20 passed, 0 failed`.
 - Additional Bootstrap regression suite after serialization, ANSI/control, Registry, WSL, Font, and cleanup fixes: `bootstrap-tests-ps7-regressions2.txt` and `bootstrap-tests-ps51-regressions2.txt`.
   Literal summary in both: `Tests: 23 passed, 0 failed`.
+- Current `windows-bootstrap/tests/run.ps1` was run against the current worktree under Windows PowerShell 5.1 and PowerShell 7. Each literal summary: `Tests: 50 passed, 0 failed`. These are temporary-root tests; they do not invoke installers.
 - RIME suite includes live Windows reparse/Junction cases. It does not certify Weasel process identity across users, UAC provenance, real Raycast execution, or the residual check-to-use race.
 - Bash gate evidence: `evidence/gate4.txt` records `bash -n` success and `tests/bootstrap.sh exit=0`. Existing macOS `tests/integration.sh` reached its expected Windows-host shim boundary but ended with unrelated `~/.zimrc is not a symlink`; no macOS installer files were changed.
 - `git diff --check` passed for repository changes. No commit or push was performed.
@@ -126,14 +128,38 @@ The current source was synced into the same disposable guest and exercised throu
 
 ### Requested software expansion (2026-09-28)
 
+> Historical section: the results below predate the normal-user Spotify phase and the controlled PotPlayer PortableApps handoff. They remain evidence for the earlier 36-item manifest only; do not use their `manual_required=[Spotify, PotPlayer]` result as acceptance for current source.
+
 The current source was synced into the disposable guest and run through `-Profile Optional` after the new package entries were added:
 
 - Automated entries completed without failed components: Firefox, Microsoft Edge, Google Chrome, Python 3.14, 7-Zip, Notepad4, SumatraPDF, Quicker, and PixPin.
 - D-drive probes resolved Firefox, 7-Zip, Notepad4, SumatraPDF, Quicker, and PixPin under `D:\Program Files\...`. Chrome ignored the requested location; Python's Burn installer did not expose a stable executable path at the requested location; neither declares `installLocation`. Edge remains Windows-managed.
 - PotPlayer and Spotify were recorded as `manual_required`, not attempted as unattended installs. PotPlayer timed out with `/S` and override probing; Spotify refused administrator context.
 - Guest report summary: `failed=0`, `failed_cleaned=0`, `failed_uncleaned=0`, `manual_required=[Spotify, PotPlayer]`.
-- Current manifest totals: 36 items across Base/Core/Optional; Optional contains 24 WinGet items, one pinned download (`dwall`), and two manual items.
+- Historical manifest totals: 36 items across Base/Core/Optional; Optional then contained 24 WinGet items, one pinned download (`dwall`), and two manual items.
 - Evidence: `bootstrap/new-apps-verify/report.json`, `bootstrap/new-apps-verify/evidence.json`, and `bootstrap/new-apps-verify/README.md`; bundle `SHA256SUMS` verification passed.
+
+### Normal-user Spotify and PotPlayer PortableApps follow-up (current source)
+
+Current source replaces the two historical manual records without claiming unattended GUI success:
+
+- `Spotify.Spotify` is a `winget` item with `executionContext: user` and `--scope user`. A normal-user parent runs it before UAC; the elevated child imports only a current-user-SID, matching-run-ID, fresh, canonical-manifest-fingerprint handoff and rechecks `winget list`. An already elevated invocation cannot reverse UAC and records it as `manual_required`.
+- `PotPlayer` is a `portable-handoff` item pinned to PortableApps.com `PotPlayerPortable_1.7.22980.paf.exe`, URL `https://download2.portableapps.com/portableapps/PotPlayerPortable/PotPlayerPortable_1.7.22980.paf.exe`, SHA-256 `9c6b0364be94af7bbd117dd05df7485dfd965ee8785e44af6a0129c745f21913`. Default behavior downloads and hashes only. GUI launch requires `-LaunchPortableHandoff`; `completed` requires explicit `-ConfirmPortableHandoff` plus launcher/core-EXE revalidation. No automated extraction or GUI result is asserted.
+- Portable PowerShell regression coverage covers user-context contracts, run IDs, medium-integrity/session-zero rejection, protected root/file DACLs, hostile/stale/foreign/injected handoffs, full selected-manifest fingerprint mutation, relay marker propagation, and PortableApps layout traversal rejection.
+
+#### Spotify native UAC success path
+
+Evidence: `F:\Win11BootstrapTest\evidence\final-acceptance-07\bootstrap\spotify-uac-protected`. Its `SHA256SUMS` covers 19 raw artifacts and passed after collection. `fixture-source.json` binds the fixture to the current production hashes above; the fixture's scope is intentionally Spotify-only.
+
+- Task `WB-Uac2-3686b57cf4c74757aa286a76fa7379de` was registered as `WINBOOTTEST\tester`, `InteractiveToken`, and `LeastPrivilege`. Its parent record shows the genuine desktop token: SID `S-1-5-21-1666337339-1272416324-4167337723-1000`, session `1`, non-administrator, Medium Mandatory Level `S-1-16-8192`; it completed with child exit `0`.
+- The auto-approved UAC child report/state use run ID `59c817e0a4c7487891110709f73f9932`, phase `completed`, and non-null `logPath`. The child ran as the same SID in session `1` at high integrity `S-1-16-12288`.
+- The elevated child imported the handoff and recorded Spotify `completed` with `liveVerification: winget-list`; its failure/recovery lists are empty. The handoff preserves the normal-token host metadata and canonical fingerprint `a6aeeda10da7f8146032a0cbc36d601cb019ca88e293a55a51a54ae91bcbd3f6`.
+- Both `%LOCALAPPDATA%\WindowsBootstrap\UserPhase\59c817e0a4c7487891110709f73f9932` and `handoff.json` have protected DACLs with only `WINBOOTTEST\tester` and `SYSTEM`, both FullControl; no handoff `*.tmp` files remained.
+- A separate `InteractiveToken`/`LeastPrivilege` task then ran `winget list --id Spotify.Spotify --exact` from the same session-1 Medium token. Exit `0` reported `Spotify.Spotify 1.3.1.234.g59d6bf59` from source `winget`.
+
+This is native acceptance for Spotify's normal-user-to-UAC success path and protected handoff import. It does not prove UAC cancellation/retry, child-failure relay, WSL Resume, or a full production Optional installation.
+
+PotPlayer remains **BLOCKED**: cold-guest download/hash, explicit GUI launch, user-selected destination, confirmation/live layout-hash check, upgrade/re-run, and cleanup boundaries still need native evidence before any `completed` claim.
 
 ## RIME Track A and native safety evidence
 
@@ -149,7 +175,7 @@ The current source was synced into the disposable guest and run through `-Profil
 | Item | Scope | Verdict | Evidence / limitation |
 |---|---|---|---|
 | Windows 11 x64 and signed PS7 x64 host contract | native | PASS | Guest build `26200`, x64, PS7 `7.6.6`; parser and host-policy cases pass. Registry label is `Windows 10 Pro`, handled by build-aware detection. |
-| UAC launcher provenance and hostile PATH | portable/stubbed only | BLOCKED | Trusted-host logic and hostile-PATH fixtures pass in suite. Real elevated fallback provenance was not independently completed; no fake host was elevated. |
+| Spotify normal-user UAC handoff | native guest success path + portable guards | PASS for success path | `final-acceptance-07/bootstrap/spotify-uac-protected`: InteractiveToken/Limited parent was session-1 Medium, UAC child was session-1 High, protected handoff imported, and elevated/live WinGet verification passed. UAC decline/retry and child-failure relay remain unverified. |
 | Registry rollback, absent/present value, forced recovery | native fixture | PASS | `0077`/`0079` records exact restore and `recovery_required` behavior. |
 | Junction interruption/recovery and reappearing selector | native filesystem fixture | PASS | Guest suite plus native recovery records; ambiguous selector is preserved, never force-overwritten. |
 | Weasel Interactive/Quiet deployment artifacts | native runtime | BLOCKED | Existing Weasel deployment attempts reached runtime/version/deployer problems and timeout/stale-artifact paths. No clean fresh Interactive and Quiet acceptance pair was obtained. |
@@ -167,11 +193,14 @@ The current source was synced into the disposable guest and run through `-Profil
 2. The live runtime-control matrix (`-IncludeUserName`, window-handle graceful close, windowless forced stop, final PID revalidation) remains unverified. Portable tests prove fail-closed logic only.
 3. Cross-SID/session isolation and actual Raycast execution remain unverified because required user/session and Raycast setup were not introduced.
 4. The compact final health collector experienced intermittent PowerShell Direct credential/remoting failures. Existing successful health output and the isolated harness summary remain the retained recovery evidence.
-5. Existing macOS integration failure in `evidence/gate4.txt` (`~/.zimrc is not a symlink`) is unrelated to Windows changes; no macOS installer source was edited.
+5. UAC decline/retry, `-PassThru` relay when the elevated child fails, regular `-Resume`, and Limited-token WSL Resume remain unverified. The guest UAC settings auto-approve the success path and cannot prove cancellation behavior.
+6. PotPlayer's PortableApps path has no cold-guest interactive acceptance yet: download/hash, GUI launch, selected root, explicit confirmation, upgrade/re-run, and cleanup remain open.
+7. Existing macOS integration failure in `evidence/gate4.txt` (`~/.zimrc is not a symlink`) is unrelated to Windows changes; no macOS installer source was edited.
 
 ## Cleanup and preservation
 
-- Final evidence bundle: `F:\Win11BootstrapTest\evidence\final-acceptance-06` with `SHA256SUMS`; `sha256sum -c` passed before cleanup.
+- Historical evidence bundle: `F:\Win11BootstrapTest\evidence\final-acceptance-06` with `SHA256SUMS`; `sha256sum -c` passed before cleanup.
+- Current protected Spotify UAC bundle: `F:\Win11BootstrapTest\evidence\final-acceptance-07\bootstrap\spotify-uac-protected`. Its 19-artifact `SHA256SUMS` passed after collection; raw task XML, parent record, state/report/log, handoff, ACL facts, fixture provenance, source copies, and limited-token live WinGet result are retained.
 - Disposable guest fixture roots and temporary lifecycle roots were removed after metadata archival. `remove-isolated-06-roots-robocopy.json` records `remaining: []` for both `C:\repo\bootstrap-native-isolated-mint-06` and `C:\repo\rime-isolation-backup-06`.
 - Legacy `RimeAcceptance` data was not deleted. Cleanup verification reported `legacyExists: true`, `targetExists: true`, and `legacySelector=C:\Users\tester\AppData\Local\RimeAcceptance\RimeConfig`.
 - `bootstrap.lock`/`install.lock` paths may remain by design; active handles were released.

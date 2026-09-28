@@ -78,10 +78,36 @@ try {
         Assert-Test (@(Get-ChildItem -LiteralPath $script:TestRoot -Filter 'atomic.json.*.tmp' -ErrorAction SilentlyContinue).Count -eq 0) 'temporary JSON file remains'
     }
 
+    Invoke-TestCase 'manifest fingerprint is stable and binds machine items' {
+        $user = [pscustomobject]@{ name = 'Spotify'; mode = 'winget'; wingetId = 'Spotify.Spotify'; executionContext = 'user'; silentInstallArgs = @('--scope', 'user') }
+        $machine = [pscustomobject]@{ name = 'Git'; mode = 'winget'; wingetId = 'Git.Git'; executionContext = 'elevated'; silentInstallArgs = @('--scope', 'machine') }
+        $first = Get-BootstrapUserPhaseManifestFingerprint @($user, $machine)
+        $second = Get-BootstrapUserPhaseManifestFingerprint @($user, $machine)
+        Assert-Equal $first $second 'manifest fingerprint is not stable'
+        $changedMachine = [pscustomobject]@{ name = 'Git'; mode = 'winget'; wingetId = 'Git.Git'; executionContext = 'elevated'; silentInstallArgs = @('--scope', 'user') }
+        Assert-Test ($first -ne (Get-BootstrapUserPhaseManifestFingerprint @($user, $changedMachine))) 'manifest fingerprint did not bind machine item details'
+    }
+
+    Invoke-TestCase 'user phase handoff file DACL is owner and SYSTEM only' {
+        if ([Environment]::OSVersion.Platform -ne 'Win32NT') { return }
+        $root = Join-Path $script:TestRoot 'handoff-acl'
+        $ownerSid = Get-BootstrapCurrentUserSid
+        New-Item -ItemType Directory -Path $root -Force | Out-Null
+        Protect-BootstrapUserPhaseRoot $root $ownerSid | Out-Null
+        $handoff = Join-Path $root 'handoff.json'
+        Write-BootstrapJson $handoff ([ordered]@{ format = 1 })
+        Protect-BootstrapUserPhaseHandoff $handoff $ownerSid | Out-Null
+        Assert-Test (Test-BootstrapUserPhasePathSecurity $root $ownerSid -RequireProtectedDacl) 'protected user phase root was rejected'
+        Assert-Test (Test-BootstrapUserPhasePathSecurity $handoff $ownerSid -RequireProtectedDacl) 'protected handoff DACL was rejected'
+        $acl = Get-Acl -LiteralPath $handoff
+        Assert-Test $acl.AreAccessRulesProtected 'handoff DACL stayed inherited'
+    }
+
     Invoke-TestCase 'manifest metadata contract' {
         $items = @(Get-BootstrapManifestItems (Join-Path $script:RepoRoot 'windows-bootstrap\packages') @('base.json', 'core.json', 'optional.json'))
         Assert-Test ($items.Count -eq 36) 'unexpected manifest item count'
         Assert-Test (@($items | Where-Object { $_.mode -eq 'download' }).Count -gt 0) 'download item missing'
+        Assert-Test (@($items | Where-Object { $_.mode -eq 'portable-handoff' }).Count -eq 1) 'portable handoff item missing'
         Assert-Test (@($items | Where-Object { $_.mode -eq 'winget' -and $_.architecture -eq 'x64' }).Count -gt 0) 'x64 WinGet metadata missing'
         $font = Get-BootstrapFontManifest (Join-Path $script:RepoRoot 'windows-bootstrap')
         Assert-Equal $font.sha256 'fab782a66f7d3019da64f6572db9fc5d3a4bcb19f9fa13e2d8a62e3693d6396e' 'font checksum changed'
@@ -152,6 +178,9 @@ try {
         $context = New-TestContext 'log-path'
         Assert-Test (-not [string]::IsNullOrWhiteSpace([string]$context.Report.logPath)) 'report logPath missing'
         Assert-Equal ([string]$context.Report.logPath) ([string]$context.LogPath) 'report logPath does not match the context log'
+        $constructedRoot = Join-Path $script:TestRoot 'constructed-log-path'
+        $constructed = New-BootstrapContext $constructedRoot 'Core' $false 'Run' $script:RepoRoot
+        Assert-Equal ([string](Get-BootstrapObjectProperty $constructed.Report 'logPath')) ([string]$constructed.LogPath) 'constructed report logPath does not match the context log'
     }
 
     Invoke-TestCase 'external output streams into the log file' {
@@ -218,9 +247,17 @@ try {
         foreach ($id in @('Mozilla.Firefox', 'Microsoft.Edge', 'Google.Chrome', 'Python.Python.3.14', '7zip.7zip', 'zufuliu.notepad4', 'SumatraPDF.SumatraPDF', 'LiErHeXun.Quicker', 'PixPin.PixPin', 'Daum.PotPlayer', 'Spotify.Spotify')) {
             Assert-Test (@($items | Where-Object { [string](Get-BootstrapObjectProperty $_ 'wingetId') -eq $id }).Count -eq 1) "requested package missing: $id"
         }
-        $manual = @($items | Where-Object { $_.mode -eq 'manual' })
-        Assert-Test ($manual.Count -eq 2) 'PotPlayer and Spotify should remain explicit manual items'
-        Assert-Test (@($manual | Where-Object { [string]$_.reason -match 'silent|administrator' }).Count -eq 2) 'manual reasons missing unattended-install evidence'
+        $spotify = @($items | Where-Object { [string](Get-BootstrapObjectProperty $_ 'wingetId') -eq 'Spotify.Spotify' })[0]
+        Assert-Equal ([string]$spotify.mode) 'winget' 'Spotify must use WinGet in the normal-user phase'
+        Assert-Equal (Get-BootstrapItemExecutionContext $spotify) 'user' 'Spotify execution context must be user'
+        Assert-Test (Test-BootstrapWinGetUserScope -InstallArguments @($spotify.silentInstallArgs)) 'Spotify must have an ordered --scope user contract'
+        Assert-Test (-not (Test-BootstrapWinGetUserScope -InstallArguments @('--scope', 'machine', 'user'))) 'misordered/machine WinGet scope was accepted'
+        $potPlayer = @($items | Where-Object { [string](Get-BootstrapObjectProperty $_ 'wingetId') -eq 'Daum.PotPlayer' })[0]
+        Assert-Equal ([string]$potPlayer.mode) 'portable-handoff' 'PotPlayer must use controlled PortableApps handoff'
+        Assert-Equal (Get-BootstrapItemExecutionContext $potPlayer) 'user' 'PotPlayer execution context must be user'
+        Assert-Equal ([string]$potPlayer.checksum) 'sha256:9c6b0364be94af7bbd117dd05df7485dfd965ee8785e44af6a0129c745f21913' 'PotPlayer PortableApps hash changed'
+        Assert-Equal ([string]$potPlayer.verification.launcher) 'PotPlayerPortable.exe' 'PotPlayer launcher contract missing'
+        Assert-Equal ([string]$potPlayer.verification.coreExecutable) 'App\PotPlayer\PotPlayerMini64.exe' 'PotPlayer core executable contract missing'
     }
 
     Invoke-TestCase 'portable and executable location metadata are accepted' {
@@ -231,6 +268,40 @@ try {
         Assert-Equal ([string]$sumatra.locationSupport) 'exe' 'SumatraPDF executable locationSupport missing'
         Assert-Equal ([string]$notepad.homepage) 'https://github.com/zufuliu/notepad4' 'Notepad4 upstream missing'
         Assert-Equal ([string]$sumatra.homepage) 'https://github.com/sumatrapdfreader/sumatrapdf' 'SumatraPDF upstream missing'
+    }
+
+    Invoke-TestCase 'user execution and portable handoff contracts are constrained' {
+        $directory = Join-Path $script:TestRoot 'user-context-contract'
+        New-Item -ItemType Directory -Path $directory -Force | Out-Null
+        $item = [ordered]@{
+            name = 'Broken user WinGet package'
+            mode = 'winget'
+            wingetId = 'Broken.User.Package'
+            version = '1.0'
+            architecture = 'x64'
+            executionContext = 'user'
+            silentInstallArgs = @('--silent')
+            uninstallCommand = [ordered]@{ type = 'winget'; args = @() }
+            source = 'winget:Broken.User.Package'
+            checksum = 'winget-source-signed'
+            verification = [ordered]@{ type = 'winget-list'; command = 'Broken.User.Package' }
+        }
+        Write-BootstrapJson (Join-Path $directory 'user.json') ([ordered]@{ format = 1; items = @($item) })
+        $missingScope = $false
+        try { @(Get-BootstrapManifestItems $directory @('user.json')) | Out-Null } catch { $missingScope = $true }
+        Assert-Test $missingScope 'user-context WinGet item without --scope user was accepted'
+        $item.mode = 'portable-handoff'
+        $item.wingetId = 'Broken.Portable'
+        $item.silentInstallArgs = @()
+        $item.uninstallCommand = [ordered]@{ type = 'manual'; args = @() }
+        $item.url = 'https://example.com/PotPlayerPortable.paf.exe'
+        $item.checksum = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+        $item.verification = [ordered]@{ type = 'portable-layout'; launcher = '..\unsafe.exe'; coreExecutable = 'App\PotPlayer\PotPlayerMini64.exe' }
+        $item.portableDirectory = 'PotPlayerPortable'
+        Write-BootstrapJson (Join-Path $directory 'user.json') ([ordered]@{ format = 1; items = @($item) })
+        $unsafeLayout = $false
+        try { @(Get-BootstrapManifestItems $directory @('user.json')) | Out-Null } catch { $unsafeLayout = $true }
+        Assert-Test $unsafeLayout 'portable handoff with traversal layout was accepted'
     }
 
     Invoke-TestCase 'manual items require a reason and location type is constrained' {
@@ -260,6 +331,57 @@ try {
         Assert-Test $unknownLocation 'unsupported install location type was accepted'
     }
 
+    Invoke-TestCase 'user phase handoff rejects stale, foreign, and extra results' {
+        $runId = '0123456789abcdef0123456789abcdef'
+        $items = @([pscustomobject]@{ name = 'Spotify'; mode = 'winget'; wingetId = 'Spotify.Spotify'; executionContext = 'user' })
+        $handoff = [pscustomobject]@{
+            format = 1
+            kind = 'windows-bootstrap-user-phase'
+            runId = $runId
+            ownerSid = 'S-1-5-21-1-2-3-1001'
+            createdAt = [DateTime]::UtcNow.ToString('o')
+            profile = 'Optional'
+            host = [pscustomobject]@{ UserSid = 'S-1-5-21-1-2-3-1001'; IsAdministrator = $false; SessionId = 1; IntegritySid = 'S-1-16-8192' }
+            manifestFingerprint = Get-BootstrapUserPhaseManifestFingerprint $items
+            results = @([pscustomobject]@{ name = 'Spotify'; mode = 'winget'; executionContext = 'user'; wingetId = 'Spotify.Spotify'; status = 'completed' })
+        }
+        Assert-Test (Test-BootstrapUserPhaseHandoffData $handoff $runId 'S-1-5-21-1-2-3-1001' $items 'Optional').valid 'valid user phase handoff was rejected'
+        Assert-Equal ([string](Test-BootstrapUserPhaseHandoffData $handoff $runId 'S-1-5-21-1-2-3-1001' $items 'Optional').host.IntegritySid) 'S-1-16-8192' 'valid handoff did not retain normal-user host metadata'
+        $handoff.profile = 'Core'
+        Assert-Test (-not (Test-BootstrapUserPhaseHandoffData $handoff $runId 'S-1-5-21-1-2-3-1001' $items 'Optional').valid) 'cross-profile user phase handoff was accepted'
+        $handoff.profile = 'Optional'
+        $handoff.host.IntegritySid = 'S-1-16-12288'
+        Assert-Test (-not (Test-BootstrapUserPhaseHandoffData $handoff $runId 'S-1-5-21-1-2-3-1001' $items).valid) 'elevated normal-user handoff was accepted'
+        $handoff.host.IntegritySid = 'S-1-16-8192'
+        $handoff.host.SessionId = 0
+        Assert-Test (-not (Test-BootstrapUserPhaseHandoffData $handoff $runId 'S-1-5-21-1-2-3-1001' $items).valid) 'session-zero normal-user handoff was accepted'
+        $handoff.host.SessionId = 1
+        $handoff.results[0].executionContext = 'elevated'
+        Assert-Test (-not (Test-BootstrapUserPhaseHandoffData $handoff $runId 'S-1-5-21-1-2-3-1001' $items 'Optional').valid) 'wrong user phase execution context was accepted'
+        $handoff.results[0].executionContext = 'user'
+        $handoff.ownerSid = 'S-1-5-21-foreign'
+        Assert-Test (-not (Test-BootstrapUserPhaseHandoffData $handoff $runId 'S-1-5-21-1-2-3-1001' $items).valid) 'foreign user phase handoff was accepted'
+        $handoff.ownerSid = 'S-1-5-21-1-2-3-1001'
+        $handoff.createdAt = [DateTime]::UtcNow.AddHours(-25).ToString('o')
+        Assert-Test (-not (Test-BootstrapUserPhaseHandoffData $handoff $runId 'S-1-5-21-1-2-3-1001' $items).valid) 'stale user phase handoff was accepted'
+        $handoff.createdAt = [DateTime]::UtcNow.ToString('o')
+        $handoff.manifestFingerprint = ('a' * 64)
+        Assert-Test (-not (Test-BootstrapUserPhaseHandoffData $handoff $runId 'S-1-5-21-1-2-3-1001' $items).valid) 'user phase handoff with foreign manifest fingerprint was accepted'
+        $handoff.manifestFingerprint = Get-BootstrapUserPhaseManifestFingerprint $items
+        $expandedItems = @($items) + [pscustomobject]@{ name = 'Machine item'; mode = 'winget'; wingetId = 'Machine.Package'; executionContext = 'elevated' }
+        Assert-Test (-not (Test-BootstrapUserPhaseHandoffData $handoff $runId 'S-1-5-21-1-2-3-1001' $expandedItems).valid) 'user phase handoff was accepted after machine-phase manifest changed'
+        $handoff.results = @($handoff.results) + [pscustomobject]@{ name = 'Injected'; mode = 'winget'; wingetId = 'Injected.Package'; status = 'completed' }
+        Assert-Test (-not (Test-BootstrapUserPhaseHandoffData $handoff $runId 'S-1-5-21-1-2-3-1001' $items).valid) 'user phase handoff with injected item was accepted'
+    }
+
+    Invoke-TestCase 'run IDs are constrained and survive explicit context construction' {
+        Assert-Test (Test-BootstrapRunId '0123456789abcdef0123456789abcdef') 'valid run ID rejected'
+        Assert-Test (-not (Test-BootstrapRunId '../bad')) 'unsafe run ID accepted'
+        $root = Join-Path $script:TestRoot 'explicit-run-id'
+        $context = New-BootstrapContext $root 'Core' $true 'Run' $script:RepoRoot -RunId '0123456789abcdef0123456789abcdef'
+        Assert-Equal $context.RunId '0123456789abcdef0123456789abcdef' 'explicit run ID was not retained'
+    }
+
     Invoke-TestCase 'elevated relaunch keeps the script path and bound parameters' {
         $bound = @{
             StateRoot = 'D:\state root'
@@ -276,6 +398,12 @@ try {
         Assert-Test ($arguments -contains '"D:\state root"') 'StateRoot value not quoted'
         Assert-Test ($arguments -contains '-SkipRime') 'enabled switch missing'
         Assert-Test (-not ($arguments -contains '-DryRun')) 'disabled switch should be dropped'
+        $bound.BootstrapRunId = '0123456789abcdef0123456789abcdef'
+        $bound.BootstrapUserPhaseHandoff = [System.Management.Automation.SwitchParameter]::new($true)
+        $arguments = @(Get-BootstrapElevatedArguments 'D:\repo\windows-bootstrap\install.ps1' $bound)
+        Assert-Test ($arguments -contains '-BootstrapRunId') 'user-phase run ID name missing'
+        Assert-Test ($arguments -contains '"0123456789abcdef0123456789abcdef"') 'user-phase run ID value missing'
+        Assert-Test ($arguments -contains '-BootstrapUserPhaseHandoff') 'user-phase handoff marker missing'
     }
 
     Invoke-TestCase 'external process timeout is enforced and reported' {
@@ -701,6 +829,7 @@ try {
 
     Write-Host "Tests: $script:Passed passed, $script:Failed failed"
     if ($script:Failed -gt 0) { exit 1 }
+    exit 0
 } finally {
     if (Test-Path -LiteralPath $script:TestRoot) {
         Remove-Item -LiteralPath $script:TestRoot -Recurse -Force -ErrorAction SilentlyContinue

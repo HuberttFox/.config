@@ -53,9 +53,9 @@
 | Base | `base.json` | Git、lazygit、PowerShell 7、Windows Terminal |
 | Core | `core.json` | WSL 2 + Ubuntu LTS、JetBrains Mono Nerd Font、Mint RIME、Mint 默认输入法、PowerShell profile |
 | Fonts | `fonts.json` | 固定版本 JetBrains Mono Nerd Font（URL、SHA-256、file pattern） |
-| Optional | `optional.json` | 24 个 WinGet/Microsoft Store 项（含 Firefox、Edge、Chrome、Python 3.14、7-Zip、Notepad4、SumatraPDF、Quicker、PixPin 等）、2 个 manual 项（PotPlayer、Spotify）与固定直链的 dwall |
+| Optional | `optional.json` | 25 个 WinGet/Microsoft Store 项（含普通用户阶段 Spotify、Firefox、Edge、Chrome、Python 3.14、7-Zip、Notepad4、SumatraPDF、Quicker、PixPin 等）、固定直链的 dwall，以及 SHA-256 固定的 PotPlayer PortableApps 交互 handoff |
 
-每个 WinGet 项必须声明明确的 package ID 与静默参数。没有可靠静默安装或验证方式的项保持 `manual_required`；绝不模拟 GUI 操作。逐项参考：[Windows bootstrap 软件清单](windows-bootstrap-packages.zh-CN.md)。
+每个 WinGet 项必须声明明确的 package ID 与静默参数。Spotify 因安装器拒绝提权而固定为普通用户 `--scope user` 阶段；源 token 必须是 non-admin、session ≥1、Medium integrity。管理员 child 仅导入 owner/SYSTEM-only protected DACL handoff，且 SID、run ID、profile、完整 manifest SHA-256、逐项结果均匹配；随后仍须 WinGet 实况复核。PotPlayer 固定 PortableApps artifact 仅作为用户确认的 GUI handoff，绝不模拟 GUI 操作。逐项参考：[Windows bootstrap 软件清单](windows-bootstrap-packages.zh-CN.md)。
 
 ## 备注
 

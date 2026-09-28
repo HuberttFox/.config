@@ -53,9 +53,9 @@ Package-only components — no repository-managed configuration:
 | Base | `base.json` | Git, lazygit, PowerShell 7, Windows Terminal |
 | Core | `core.json` | WSL 2 + Ubuntu LTS, JetBrains Mono Nerd Font, Mint RIME, Mint input-method default, PowerShell profiles |
 | Fonts | `fonts.json` | Pinned JetBrains Mono Nerd Font (URL, SHA-256, file pattern) |
-| Optional | `optional.json` | 24 WinGet/Microsoft Store items (including Firefox, Edge, Chrome, Python 3.14, 7-Zip, Notepad4, SumatraPDF, Quicker, and PixPin), 2 manual items (PotPlayer, Spotify), and pinned-download dwall |
+| Optional | `optional.json` | 25 WinGet/Microsoft Store items (including normal-user Spotify, Firefox, Edge, Chrome, Python 3.14, 7-Zip, Notepad4, SumatraPDF, Quicker, and PixPin), pinned-download dwall, and a SHA-256-pinned interactive PortableApps handoff for PotPlayer |
 
-Every WinGet item must declare an explicit package ID and silent arguments. Items without a reliable silent install or verification stay `manual_required`; GUI automation is never simulated. Per-item reference: [Windows bootstrap packages](windows-bootstrap-packages.md).
+Every WinGet item must declare an explicit package ID and silent arguments. Spotify is a normal-user `--scope user` phase because its installer rejects elevation; source token must be non-admin, session ≥1, and Medium integrity. The elevated child imports only a protected owner/SYSTEM-DACL handoff matching SID, run ID, profile, full-manifest SHA-256, and item results, then performs live WinGet verification. PotPlayer uses a fixed PortableApps artifact only as a user-confirmed GUI handoff, never as simulated GUI automation. Per-item reference: [Windows bootstrap packages](windows-bootstrap-packages.md).
 
 ## Notes
 

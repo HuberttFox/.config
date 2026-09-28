@@ -128,6 +128,311 @@ function Get-BootstrapRoot([string]$RepositoryRoot) {
     return Join-Path $RepositoryRoot 'windows-bootstrap'
 }
 
+function Test-BootstrapRunId([string]$RunId) {
+    return -not [string]::IsNullOrWhiteSpace($RunId) -and $RunId -match '^[0-9a-fA-F]{32}$'
+}
+
+function Assert-BootstrapPlainPath([string]$Path) {
+    if ([string]::IsNullOrWhiteSpace($Path)) { throw 'Bootstrap path is empty' }
+    try { $full = [IO.Path]::GetFullPath($Path) } catch { throw "Invalid bootstrap path: $Path" }
+    $cursor = $full
+    while (-not [string]::IsNullOrWhiteSpace($cursor)) {
+        $item = $null
+        try { $item = Get-Item -LiteralPath $cursor -Force -ErrorAction Stop } catch {
+            if ([string]$_.CategoryInfo.Category -ne 'ObjectNotFound') {
+                throw "Cannot inspect bootstrap path safely: $cursor ($($_.Exception.Message))"
+            }
+        }
+        if ($null -ne $item -and (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
+            throw "Unsafe reparse path: $cursor"
+        }
+        $parent = [IO.Path]::GetDirectoryName($cursor)
+        if ([string]::IsNullOrWhiteSpace($parent) -or $parent -eq $cursor) { break }
+        $cursor = $parent
+    }
+    return $full
+}
+
+function Ensure-BootstrapPlainDirectory([string]$Path) {
+    $full = Assert-BootstrapPlainPath $Path
+    if (Test-Path -LiteralPath $full) {
+        if (-not (Test-Path -LiteralPath $full -PathType Container)) { throw "Bootstrap path is not a directory: $full" }
+    } else {
+        [IO.Directory]::CreateDirectory($full) | Out-Null
+    }
+    $full = Assert-BootstrapPlainPath $full
+    if (-not (Test-Path -LiteralPath $full -PathType Container)) { throw "Bootstrap directory creation failed: $full" }
+    return $full
+}
+
+function Assert-BootstrapPlainExistingFile([string]$Path, [string]$Purpose = 'Bootstrap file') {
+    $full = Assert-BootstrapPlainPath $Path
+    if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { throw "$Purpose is missing or is not a plain file: $full" }
+    $item = Get-Item -LiteralPath $full -Force -ErrorAction Stop
+    if ($item.PSIsContainer -or (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        throw "$Purpose is not a plain file: $full"
+    }
+    return $full
+}
+
+function Test-BootstrapSafeRelativePath([string]$Path) {
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    $normalized = $Path -replace '/', '\'
+    if ($normalized -match '(^\\|^[A-Za-z]:|[<>:"|?*\x00-\x1f]|(^|\\)\.\.?(\\|$))') { return $false }
+    foreach ($segment in @($normalized -split '\\')) {
+        if ([string]::IsNullOrWhiteSpace($segment) -or $segment -match '[. ]$' -or
+            $segment -match '(?i)^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$') {
+            return $false
+        }
+    }
+    return $true
+}
+
+function Get-BootstrapCurrentUserSid {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    if ($null -eq $identity -or $null -eq $identity.User -or [string]::IsNullOrWhiteSpace([string]$identity.User.Value)) {
+        throw 'Current Windows user SID is unavailable'
+    }
+    return [string]$identity.User.Value
+}
+
+function Get-BootstrapUserPhaseStateRoot([string]$RunId, [string]$LocalAppData = '') {
+    if (-not (Test-BootstrapRunId $RunId)) { throw "Invalid user-phase run ID: $RunId" }
+    if ([string]::IsNullOrWhiteSpace($LocalAppData)) { $LocalAppData = $env:LOCALAPPDATA }
+    if ([string]::IsNullOrWhiteSpace($LocalAppData)) { throw 'LOCALAPPDATA is required for the user bootstrap phase' }
+    $base = Assert-BootstrapPlainPath $LocalAppData
+    return Assert-BootstrapPlainPath (Join-Path (Join-Path (Join-Path $base 'WindowsBootstrap') 'UserPhase') $RunId.ToLowerInvariant())
+}
+
+function Get-BootstrapUserPhaseHandoffPath([string]$RunId, [string]$LocalAppData = '') {
+    return Join-Path (Get-BootstrapUserPhaseStateRoot $RunId $LocalAppData) 'handoff.json'
+}
+
+function Get-BootstrapItemExecutionContext($Item) {
+    $value = [string](Get-BootstrapObjectProperty $Item 'executionContext')
+    if ([string]::IsNullOrWhiteSpace($value)) { return 'elevated' }
+    return $value
+}
+
+function Get-BootstrapUserPhaseItems($Items) {
+    return @($Items | Where-Object { (Get-BootstrapItemExecutionContext $_) -eq 'user' })
+}
+
+function Test-BootstrapWinGetUserScope([string[]]$InstallArguments) {
+    $arguments = @($InstallArguments)
+    $hasScope = $false
+    for ($index = 0; $index -lt $arguments.Count; $index++) {
+        if ([string]$arguments[$index] -ine '--scope') { continue }
+        $hasScope = $true
+        if ($index + 1 -ge $arguments.Count -or [string]$arguments[$index + 1] -ine 'user') { return $false }
+    }
+    return $hasScope
+}
+
+function Get-BootstrapPathOwnerSid([string]$Path) {
+    $full = Assert-BootstrapPlainPath $Path
+    $acl = Get-Acl -LiteralPath $full -ErrorAction Stop
+    $owner = [string]$acl.Owner
+    if ([string]::IsNullOrWhiteSpace($owner)) { throw "Owner is unavailable for bootstrap path: $full" }
+    if ($owner -match '^S-1-\d+(?:-\d+)+$') { return $owner }
+    return ([Security.Principal.NTAccount]$owner).Translate([Security.Principal.SecurityIdentifier]).Value
+}
+
+function Test-BootstrapUserPhasePathSecurity([string]$Path, [string]$OwnerSid, [switch]$RequireProtectedDacl) {
+    try {
+        if ([string]::IsNullOrWhiteSpace($OwnerSid)) { return $false }
+        $fullPath = Assert-BootstrapPlainPath $Path
+        $acl = Get-Acl -LiteralPath $fullPath -ErrorAction Stop
+        if ((Get-BootstrapPathOwnerSid $fullPath) -cne $OwnerSid) { return $false }
+        if ($RequireProtectedDacl -and -not [bool]$acl.AreAccessRulesProtected) { return $false }
+        $sidType = [System.Security.Principal.SecurityIdentifier]
+        $rules = @($acl.GetAccessRules($true, $true, $sidType))
+        if ($rules.Count -eq 0) { return $false }
+        $allowedSids = @($OwnerSid, 'S-1-5-18')
+        $requiredSids = @{}
+        $fullControl = [long][System.Security.AccessControl.FileSystemRights]::FullControl
+        foreach ($rule in $rules) {
+            $sid = [string]$rule.IdentityReference.Value
+            if ($sid -notin $allowedSids) { return $false }
+            if ($rule.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) { return $false }
+            if (([long]$rule.FileSystemRights -band $fullControl) -ne $fullControl) { return $false }
+            $requiredSids[$sid] = $true
+        }
+        return $requiredSids.ContainsKey($OwnerSid) -and $requiredSids.ContainsKey('S-1-5-18')
+    } catch {
+        return $false
+    }
+}
+
+function Protect-BootstrapUserPhasePath([string]$Path, [string]$OwnerSid, [switch]$Directory) {
+    $fullPath = Assert-BootstrapPlainPath $Path
+    $expectedType = if ($Directory) { 'directory' } else { 'file' }
+    $exists = if ($Directory) {
+        Test-Path -LiteralPath $fullPath -PathType Container
+    } else {
+        Test-Path -LiteralPath $fullPath -PathType Leaf
+    }
+    if (-not $exists) { throw "User phase $expectedType is missing: $fullPath" }
+    if ((Get-BootstrapPathOwnerSid $fullPath) -cne $OwnerSid) {
+        throw "User phase $expectedType owner does not match current user: $fullPath"
+    }
+    $acl = Get-Acl -LiteralPath $fullPath -ErrorAction Stop
+    $acl.SetAccessRuleProtection($true, $false)
+    $sidType = [System.Security.Principal.SecurityIdentifier]
+    foreach ($rule in @($acl.GetAccessRules($true, $true, $sidType))) {
+        [void]$acl.RemoveAccessRuleAll($rule)
+    }
+    $inheritance = if ($Directory) {
+        [System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit
+    } else {
+        [System.Security.AccessControl.InheritanceFlags]::None
+    }
+    $propagation = [System.Security.AccessControl.PropagationFlags]::None
+    $allow = [System.Security.AccessControl.AccessControlType]::Allow
+    $fullControl = [System.Security.AccessControl.FileSystemRights]::FullControl
+    foreach ($sid in @($OwnerSid, 'S-1-5-18')) {
+        $identity = New-Object -TypeName System.Security.Principal.SecurityIdentifier -ArgumentList $sid
+        $rule = New-Object -TypeName System.Security.AccessControl.FileSystemAccessRule -ArgumentList @($identity, $fullControl, $inheritance, $propagation, $allow)
+        [void]$acl.AddAccessRule($rule)
+    }
+    Set-Acl -LiteralPath $fullPath -AclObject $acl -ErrorAction Stop
+    if (-not (Test-BootstrapUserPhasePathSecurity $fullPath $OwnerSid -RequireProtectedDacl)) {
+        throw "User phase $expectedType DACL does not match the required owner/SYSTEM policy: $fullPath"
+    }
+    return $fullPath
+}
+
+function Protect-BootstrapUserPhaseRoot([string]$Path, [string]$OwnerSid) {
+    return Protect-BootstrapUserPhasePath $Path $OwnerSid -Directory
+}
+
+function Protect-BootstrapUserPhaseHandoff([string]$Path, [string]$OwnerSid) {
+    return Protect-BootstrapUserPhasePath $Path $OwnerSid
+}
+
+function ConvertTo-BootstrapCanonicalJsonValue($Value) {
+    if ($null -eq $Value -or $Value -is [string] -or $Value -is [ValueType]) { return $Value }
+    if ($Value -is [System.Collections.IDictionary]) {
+        $record = [ordered]@{}
+        foreach ($name in @($Value.Keys | ForEach-Object { [string]$_ } | Sort-Object)) {
+            $record[$name] = ConvertTo-BootstrapCanonicalJsonValue (Get-BootstrapObjectProperty $Value $name)
+        }
+        return [pscustomobject]$record
+    }
+    if ($Value -is [System.Collections.IEnumerable]) {
+        $values = @()
+        foreach ($entry in $Value) {
+            $values += ,(ConvertTo-BootstrapCanonicalJsonValue $entry)
+        }
+        return ,$values
+    }
+    $record = [ordered]@{}
+    foreach ($property in @($Value.PSObject.Properties | Sort-Object Name)) {
+        $record[[string]$property.Name] = ConvertTo-BootstrapCanonicalJsonValue $property.Value
+    }
+    return [pscustomobject]$record
+}
+
+function Get-BootstrapUserPhaseManifestFingerprint($Items) {
+    # This is carried by the user-phase handoff, but covers every selected
+    # manifest item. The elevated child must reject a changed machine phase.
+    $payload = [ordered]@{
+        format = 1
+        selectedItems = ConvertTo-BootstrapCanonicalJsonValue @($Items)
+    }
+    $bytes = [Text.Encoding]::UTF8.GetBytes((ConvertTo-BootstrapJsonText $payload))
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        return (([BitConverter]::ToString($sha.ComputeHash($bytes))) -replace '-', '').ToLowerInvariant()
+    } finally {
+        $sha.Dispose()
+    }
+}
+
+function Test-BootstrapUserPhaseHandoffData($Handoff, [string]$RunId, [string]$OwnerSid, $Items, [string]$ExpectedProfile = '') {
+    $invalid = {
+        param([string]$Reason)
+        return [pscustomobject]@{ valid = $false; reason = $Reason; results = @(); host = $null }
+    }
+    if (-not (Test-BootstrapRunId $RunId)) { return & $invalid 'requested run ID is invalid' }
+    if ($null -eq $Handoff) { return & $invalid 'handoff JSON is missing' }
+    if ([int](Get-BootstrapObjectProperty $Handoff 'format') -ne 1) { return & $invalid 'handoff format is unsupported' }
+    if ([string](Get-BootstrapObjectProperty $Handoff 'kind') -cne 'windows-bootstrap-user-phase') { return & $invalid 'handoff kind is unsupported' }
+    if ([string](Get-BootstrapObjectProperty $Handoff 'runId') -cne $RunId) { return & $invalid 'handoff run ID does not match' }
+    if ([string](Get-BootstrapObjectProperty $Handoff 'ownerSid') -cne $OwnerSid) { return & $invalid 'handoff owner SID does not match current user' }
+    $handoffHost = Get-BootstrapObjectProperty $Handoff 'host'
+    if ($null -eq $handoffHost) { return & $invalid 'handoff normal-user host metadata is missing' }
+    if ([string](Get-BootstrapObjectProperty $handoffHost 'UserSid') -cne $OwnerSid) { return & $invalid 'handoff normal-user host SID does not match current user' }
+    if ([bool](Get-BootstrapObjectProperty $handoffHost 'IsAdministrator')) { return & $invalid 'handoff normal-user host is elevated' }
+    if ([int](Get-BootstrapObjectProperty $handoffHost 'SessionId') -lt 1) { return & $invalid 'handoff normal-user host has no interactive desktop session' }
+    if ([string](Get-BootstrapObjectProperty $handoffHost 'IntegritySid') -cne 'S-1-16-8192') {
+        return & $invalid 'handoff normal-user host does not have medium integrity'
+    }
+    $manifestFingerprint = [string](Get-BootstrapObjectProperty $Handoff 'manifestFingerprint')
+    if ($manifestFingerprint -notmatch '^[0-9a-fA-F]{64}$') { return & $invalid 'handoff manifest fingerprint is invalid' }
+    if ($manifestFingerprint -cne (Get-BootstrapUserPhaseManifestFingerprint $Items)) {
+        return & $invalid 'handoff manifest fingerprint does not match current selected items'
+    }
+    $handoffProfile = [string](Get-BootstrapObjectProperty $Handoff 'profile')
+    if ($handoffProfile -notin @('Base', 'Core', 'Optional', 'All')) { return & $invalid 'handoff profile is invalid' }
+    if (-not [string]::IsNullOrWhiteSpace($ExpectedProfile) -and $handoffProfile -cne $ExpectedProfile) {
+        return & $invalid 'handoff profile does not match current run'
+    }
+    try {
+        $createdAt = ConvertTo-BootstrapUtcDateTime (Get-BootstrapObjectProperty $Handoff 'createdAt')
+        $age = [DateTime]::UtcNow - $createdAt
+        if ($age.TotalHours -gt 24 -or $age.TotalMinutes -lt -5) { return & $invalid 'handoff is stale or has a future timestamp' }
+    } catch { return & $invalid 'handoff timestamp is invalid' }
+    $expected = @{}
+    foreach ($item in @(Get-BootstrapUserPhaseItems $Items)) {
+        $name = [string](Get-BootstrapObjectProperty $item 'name')
+        if ([string]::IsNullOrWhiteSpace($name)) { return & $invalid 'manifest user-phase item has no name' }
+        $expected[$name] = $item
+    }
+    $received = @((Get-BootstrapObjectProperty $Handoff 'results'))
+    if ($received.Count -ne $expected.Count) { return & $invalid 'handoff result count does not match manifest user-phase items' }
+    $seen = @{}
+    $allowedStatuses = @('completed', 'failed', 'failed_cleaned', 'failed_uncleaned', 'skipped', 'manual_required', 'recovery_required')
+    foreach ($result in $received) {
+        $name = [string](Get-BootstrapObjectProperty $result 'name')
+        if (-not $expected.ContainsKey($name)) { return & $invalid "handoff contains unexpected item: $name" }
+        if ($seen.ContainsKey($name)) { return & $invalid "handoff contains duplicate item: $name" }
+        $seen[$name] = $true
+        $item = $expected[$name]
+        if ([string](Get-BootstrapObjectProperty $result 'mode') -cne [string](Get-BootstrapObjectProperty $item 'mode')) {
+            return & $invalid "handoff mode does not match manifest for: $name"
+        }
+        if ([string](Get-BootstrapObjectProperty $result 'executionContext') -cne 'user') {
+            return & $invalid "handoff execution context is invalid for: $name"
+        }
+        if ([string](Get-BootstrapItemExecutionContext $item) -cne 'user') {
+            return & $invalid "handoff item is not a user-context item: $name"
+        }
+        if ([string](Get-BootstrapObjectProperty $item 'mode') -eq 'winget' -and
+            [string](Get-BootstrapObjectProperty $result 'wingetId') -cne [string](Get-BootstrapObjectProperty $item 'wingetId')) {
+            return & $invalid "handoff WinGet ID does not match manifest for: $name"
+        }
+        $resultStatus = [string](Get-BootstrapObjectProperty $result 'status')
+        if ($resultStatus -notin $allowedStatuses) {
+            return & $invalid "handoff status is invalid for: $name"
+        }
+        if ([string](Get-BootstrapObjectProperty $item 'mode') -eq 'portable-handoff' -and $resultStatus -eq 'completed') {
+            $details = Get-BootstrapObjectProperty $result 'details'
+            foreach ($field in @('portableAppsRoot', 'userPhaseRoot', 'launcherSha256', 'coreExecutableSha256')) {
+                if ([string]::IsNullOrWhiteSpace([string](Get-BootstrapObjectProperty $details $field))) {
+                    return & $invalid "portable handoff completion has no ${field}: $name"
+                }
+            }
+            foreach ($field in @('launcherSha256', 'coreExecutableSha256')) {
+                if ([string](Get-BootstrapObjectProperty $details $field) -notmatch '^[0-9a-fA-F]{64}$') {
+                    return & $invalid "portable handoff completion has an invalid ${field}: $name"
+                }
+            }
+        }
+    }
+    return [pscustomobject]@{ valid = $true; reason = ''; results = $received; host = $handoffHost }
+}
+
 function New-BootstrapState([string]$StateRoot, [string]$RunId, [string]$SelectedProfile, [bool]$DryRun) {
     return [ordered]@{
         format = 1
@@ -158,6 +463,7 @@ function New-BootstrapState([string]$StateRoot, [string]$RunId, [string]$Selecte
         cleanup = @()
         languageSnapshotBefore = $null
         executionOptions = @{}
+        userPhase = $null
     }
 }
 
@@ -184,6 +490,7 @@ function New-BootstrapReport([string]$StateRoot, [string]$RunId, [string]$Select
         cleanup = @()
         requiresReboot = $false
         resumeTask = $null
+        userPhase = $null
     }
 }
 
@@ -196,7 +503,7 @@ function Ensure-BootstrapStateShape($State) {
             $property.Value = @()
         }
     }
-    foreach ($name in @('languageSnapshotBefore', 'requiresReboot', 'resumeTask', 'nextPhase', 'executionOptions', 'installPolicy')) {
+    foreach ($name in @('languageSnapshotBefore', 'requiresReboot', 'resumeTask', 'nextPhase', 'executionOptions', 'installPolicy', 'userPhase')) {
         if ($null -eq $State.PSObject.Properties[$name]) {
             $default = switch ($name) {
                 'languageSnapshotBefore' { $null }
@@ -220,7 +527,7 @@ function Ensure-BootstrapReportShape($Report) {
             $property.Value = @()
         }
     }
-    foreach ($name in @('host', 'finishedAt', 'requiresReboot', 'resumeTask', 'logPath', 'installPolicy')) {
+    foreach ($name in @('host', 'finishedAt', 'requiresReboot', 'resumeTask', 'logPath', 'installPolicy', 'userPhase')) {
         if ($null -eq $Report.PSObject.Properties[$name]) {
             $default = if ($name -eq 'requiresReboot') { $false } else { $null }
             $Report | Add-Member -NotePropertyName $name -NotePropertyValue $default
@@ -267,9 +574,13 @@ function New-BootstrapContext(
     [string]$RepoRoot,
     [switch]$Force,
     [switch]$Quiet,
-    [switch]$Silent
+    [switch]$Silent,
+    [string]$RunId
 ) {
     if ([string]::IsNullOrWhiteSpace($StateRoot)) { $StateRoot = Get-BootstrapDefaultStateRoot }
+    if (-not [string]::IsNullOrWhiteSpace($RunId) -and -not (Test-BootstrapRunId $RunId)) {
+        throw "Invalid Windows bootstrap run ID: $RunId"
+    }
     $StateRoot = [IO.Path]::GetFullPath($StateRoot)
     $statePath = Join-Path $StateRoot 'state.json'
     $reportPath = Join-Path $StateRoot 'report.json'
@@ -286,7 +597,7 @@ function New-BootstrapContext(
         throw "No prior Windows bootstrap report found: $reportPath"
     }
 
-    $runId = [guid]::NewGuid().ToString('N')
+    $runId = if ([string]::IsNullOrWhiteSpace($RunId)) { [guid]::NewGuid().ToString('N') } else { $RunId.ToLowerInvariant() }
     $state = $null
     $report = $null
     if ($Operation -eq 'Run') {
@@ -306,6 +617,11 @@ function New-BootstrapContext(
         $state = Ensure-BootstrapStateShape $existingState
         $runId = [string]$state.runId
         if ([string]::IsNullOrWhiteSpace($runId)) { throw "Prior Windows bootstrap state has no run ID: $statePath" }
+        if (-not (Test-BootstrapRunId $runId)) { throw "Prior Windows bootstrap state has an invalid run ID: $statePath" }
+        $runId = $runId.ToLowerInvariant()
+        if (-not [string]::IsNullOrWhiteSpace($RunId) -and $runId -cne $RunId.ToLowerInvariant()) {
+            throw "Requested run ID does not match prior Windows bootstrap state: $statePath"
+        }
         if ([string]$state.profile) { $SelectedProfile = [string]$state.profile }
         if ($Operation -eq 'Resume' -and [bool]$state.dryRun) { throw 'Dry-run state has no resumable work; start a normal run instead' }
         if ($Operation -eq 'Resume' -and [string]$state.phase -eq 'completed' -and -not $Force) {
@@ -345,8 +661,13 @@ function New-BootstrapContext(
     }
     $logPath = Join-Path $logDirectory 'bootstrap.log'
     if ($null -ne $report) {
-        if ($null -ne $report.PSObject.Properties['logPath']) { $report.logPath = $logPath }
-        else { $report | Add-Member -NotePropertyName 'logPath' -NotePropertyValue $logPath }
+        if ($report -is [System.Collections.IDictionary]) {
+            $report['logPath'] = $logPath
+        } elseif ($null -ne $report.PSObject.Properties['logPath']) {
+            $report.logPath = $logPath
+        } else {
+            $report | Add-Member -NotePropertyName 'logPath' -NotePropertyValue $logPath
+        }
     }
     return [pscustomobject]@{
         StateRoot = $StateRoot
@@ -397,6 +718,7 @@ function Save-BootstrapContext($Context) {
     }
     $Context.Report.requiresReboot = [bool]$Context.State.requiresReboot
     $Context.Report.resumeTask = $Context.State.resumeTask
+    $Context.Report.userPhase = $Context.State.userPhase
     $latest = @(Get-BootstrapLatestResults $Context.Report.results)
     $Context.Report.success = @($latest | Where-Object { $_.status -eq 'completed' })
     $Context.Report.failed = @($latest | Where-Object { $_.status -eq 'failed' })
@@ -482,6 +804,17 @@ function Test-BootstrapAdministrator {
         $principal = New-Object Security.Principal.WindowsPrincipal($identity)
         return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     } catch { return $false }
+}
+
+function Get-BootstrapTokenIntegritySid {
+    try {
+        $whoami = Join-Path $env:SystemRoot 'System32\whoami.exe'
+        if (-not (Test-Path -LiteralPath $whoami -PathType Leaf)) { return '' }
+        $output = (& $whoami /groups 2>$null | Out-String)
+        $match = [regex]::Match($output, 'S-1-16-\d+')
+        if ($match.Success) { return [string]$match.Value }
+    } catch { }
+    return ''
 }
 
 function Test-BootstrapElevationRequired([bool]$IsAdministrator, [string]$Operation, [bool]$NoElevate) {
@@ -573,6 +906,13 @@ function Get-BootstrapHostInfo {
         $product = [string]$version.ProductName
         $build = [string]$version.CurrentBuildNumber
     } catch { }
+    $identity = $null
+    $sessionId = $null
+    try {
+        $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $sessionId = (Get-Process -Id $PID -ErrorAction Stop).SessionId
+    } catch { }
+    $integrityLevel = Get-BootstrapTokenIntegritySid
     return [pscustomobject]@{
         Platform = [Environment]::OSVersion.Platform
         ProductName = $product
@@ -581,6 +921,10 @@ function Get-BootstrapHostInfo {
         Is64BitProcess = [Environment]::Is64BitProcess
         PowerShell = [string]$PSVersionTable.PSVersion
         IsAdministrator = Test-BootstrapAdministrator
+        UserName = if ($null -ne $identity) { [string]$identity.Name } else { '' }
+        UserSid = if ($null -ne $identity -and $null -ne $identity.User) { [string]$identity.User.Value } else { '' }
+        SessionId = $sessionId
+        IntegritySid = $integrityLevel
     }
 }
 
@@ -793,6 +1137,12 @@ function Get-BootstrapManifestItems([string]$ManifestDirectory, [string[]]$Files
             if ($null -eq $item.verification -or $item.verification -is [string] -or [string]::IsNullOrWhiteSpace([string]$item.verification.type)) { throw "Package manifest item has no verification metadata: $($item.name)" }
             if ($item.mode -eq 'winget' -and [string]::IsNullOrWhiteSpace([string]$item.wingetId)) { throw "WinGet item has no package ID: $($item.name)" }
             if ($item.mode -eq 'winget' -and $null -ne $item.PSObject.Properties['wingetSource'] -and [string]$item.wingetSource -notin @('winget', 'msstore')) { throw "Unsupported WinGet source for $($item.name): $($item.wingetSource)" }
+            $itemExecutionContext = Get-BootstrapItemExecutionContext $item
+            if ($itemExecutionContext -notin @('elevated', 'user')) { throw "Unsupported execution context for $($item.name): $itemExecutionContext" }
+            if ($itemExecutionContext -eq 'user' -and [string]$item.mode -eq 'winget' -and
+                -not (Test-BootstrapWinGetUserScope -InstallArguments @($item.silentInstallArgs))) {
+                throw "User-context WinGet item requires --scope user: $($item.name)"
+            }
             if ($item.mode -eq 'manual' -and [string]::IsNullOrWhiteSpace([string](Get-BootstrapObjectProperty $item 'reason'))) { throw "Manual item has no reason: $($item.name)" }
             $locationSupport = [string](Get-BootstrapObjectProperty $item 'locationSupport')
             if (-not [string]::IsNullOrWhiteSpace($locationSupport) -and $locationSupport -notin @('inno', 'msi', 'nsis', 'exe', 'portable', 'none')) { throw "Unsupported install location type for $($item.name): $locationSupport" }
@@ -802,6 +1152,21 @@ function Get-BootstrapManifestItems([string]$ManifestDirectory, [string[]]$Files
                 if ([string]$item.checksum -notmatch '(?i)^sha256:[0-9a-f]{64}$') { throw "Download item needs a sha256 checksum: $($item.name)" }
                 if ([string]$item.uninstallCommand.type -ne 'registry-uninstall') { throw "Download item needs a registry-uninstall contract: $($item.name)" }
                 if ([string]$item.verification.type -ne 'uninstall-registry' -or [string]::IsNullOrWhiteSpace([string]$item.verification.command)) { throw "Download item needs an uninstall-registry verification target: $($item.name)" }
+            }
+            if ($item.mode -eq 'portable-handoff') {
+                $downloadUrl = [string](Get-BootstrapObjectProperty $item 'url')
+                if ($itemExecutionContext -ne 'user') { throw "Portable handoff must use the user execution context: $($item.name)" }
+                if ([string]::IsNullOrWhiteSpace($downloadUrl) -or $downloadUrl -notmatch '(?i)^https://') { throw "Portable handoff has no HTTPS url: $($item.name)" }
+                if ([string]$item.checksum -notmatch '(?i)^sha256:[0-9a-f]{64}$') { throw "Portable handoff needs a sha256 checksum: $($item.name)" }
+                if (@($item.silentInstallArgs).Count -ne 0) { throw "Portable handoff must not declare unattended installer arguments: $($item.name)" }
+                if ([string]$item.uninstallCommand.type -ne 'manual') { throw "Portable handoff has an invalid uninstall contract: $($item.name)" }
+                if ([string]::IsNullOrWhiteSpace([string](Get-BootstrapObjectProperty $item 'reason'))) { throw "Portable handoff has no interactive-boundary reason: $($item.name)" }
+                if ([string]$item.verification.type -ne 'portable-layout' -or
+                    -not (Test-BootstrapSafeRelativePath ([string](Get-BootstrapObjectProperty $item.verification 'launcher'))) -or
+                    -not (Test-BootstrapSafeRelativePath ([string](Get-BootstrapObjectProperty $item.verification 'coreExecutable'))) -or
+                    -not (Test-BootstrapSafeRelativePath ([string](Get-BootstrapObjectProperty $item 'portableDirectory')))) {
+                    throw "Portable handoff has an invalid layout contract: $($item.name)"
+                }
             }
             $items += $item
         }
@@ -1004,10 +1369,12 @@ function Register-BootstrapResumeTask($Context, [string]$ScriptPath, [string]$Ta
         if (Get-Command Register-ScheduledTask -ErrorAction SilentlyContinue) {
             $action = New-ScheduledTaskAction -Execute $engine -Argument $arguments
             $trigger = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
-            $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Highest
+            # Resume from a normal user token. The entry point then runs any
+            # user-context items before requesting one UAC elevation.
+            $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
             Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
         } else {
-            & schtasks.exe /Create /TN $TaskName /SC ONLOGON /TR "`"$engine`" $arguments" /RL HIGHEST /F | Out-Null
+            & schtasks.exe /Create /TN $TaskName /SC ONLOGON /TR "`"$engine`" $arguments" /RL LIMITED /F | Out-Null
             if ($LASTEXITCODE -ne 0) { throw "schtasks failed with exit code $LASTEXITCODE" }
         }
         $Context.State.resumeTask = $TaskName
@@ -1347,6 +1714,168 @@ function Install-BootstrapDownloadApp($Context, $Item) {
     }
     Save-BootstrapContext $Context
     return [pscustomobject]@{ status = $status; message = "Installer failed (exit $($result.ExitCode)); cleanup=$cleanup"; details = [pscustomobject]$details }
+}
+
+function Get-BootstrapPortableHandoffArchivePath([string]$StateRoot, $Item, [switch]$EnsureDirectory) {
+    $uri = [Uri]([string](Get-BootstrapObjectProperty $Item 'url'))
+    $leaf = [IO.Path]::GetFileName($uri.AbsolutePath)
+    if ([string]::IsNullOrWhiteSpace($leaf) -or $leaf -notmatch '^[A-Za-z0-9._-]+$') {
+        throw "Portable handoff URL has an unsafe archive name: $($uri.AbsoluteUri)"
+    }
+    $name = ([string](Get-BootstrapObjectProperty $Item 'name') -replace '[^A-Za-z0-9._-]', '_')
+    if ([string]::IsNullOrWhiteSpace($name)) { throw 'Portable handoff item has no safe name' }
+    $root = Assert-BootstrapPlainPath (Join-Path (Join-Path $StateRoot 'downloads') $name)
+    if ($EnsureDirectory) { $root = Ensure-BootstrapPlainDirectory $root }
+    return Assert-BootstrapPlainPath (Join-Path $root $leaf)
+}
+
+function Get-BootstrapPortableHandoffTarget($Item, [string]$PortableAppsRoot) {
+    if ([string]::IsNullOrWhiteSpace($PortableAppsRoot)) { return '' }
+    $directory = [string](Get-BootstrapObjectProperty $Item 'portableDirectory')
+    if (-not (Test-BootstrapSafeRelativePath $directory)) { throw "Portable handoff directory is unsafe: $directory" }
+    $root = Assert-BootstrapPlainPath $PortableAppsRoot
+    if (Test-Path -LiteralPath $root -PathType Leaf) { throw "PortableApps root is not a directory: $root" }
+    $target = Assert-BootstrapPlainPath (Join-Path $root ($directory -replace '/', '\\'))
+    if (-not (Test-BootstrapPathWithinRoot $target $root)) { throw "Portable handoff target escapes the selected root: $target" }
+    return $target
+}
+
+function Get-BootstrapPortableHandoffLayout($Item, [string]$PortableAppsRoot) {
+    $target = Get-BootstrapPortableHandoffTarget $Item $PortableAppsRoot
+    if ([string]::IsNullOrWhiteSpace($target)) {
+        return [pscustomobject]@{ valid = $false; reason = 'PortableApps root was not supplied'; target = ''; launcher = ''; coreExecutable = '' }
+    }
+    $launcherRelative = [string](Get-BootstrapObjectProperty (Get-BootstrapObjectProperty $Item 'verification') 'launcher')
+    $coreRelative = [string](Get-BootstrapObjectProperty (Get-BootstrapObjectProperty $Item 'verification') 'coreExecutable')
+    $launcher = Assert-BootstrapPlainPath (Join-Path $target ($launcherRelative -replace '/', [string][IO.Path]::DirectorySeparatorChar))
+    $core = Assert-BootstrapPlainPath (Join-Path $target ($coreRelative -replace '/', [string][IO.Path]::DirectorySeparatorChar))
+    if (-not (Test-Path -LiteralPath $target -PathType Container)) {
+        return [pscustomobject]@{ valid = $false; reason = 'Selected PortableApps application directory is absent'; target = $target; launcher = $launcher; coreExecutable = $core }
+    }
+    if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
+        return [pscustomobject]@{ valid = $false; reason = 'PortableApps launcher is absent'; target = $target; launcher = $launcher; coreExecutable = $core }
+    }
+    if (-not (Test-Path -LiteralPath $core -PathType Leaf)) {
+        return [pscustomobject]@{ valid = $false; reason = 'PotPlayer core executable is absent'; target = $target; launcher = $launcher; coreExecutable = $core }
+    }
+    try {
+        $launcher = Assert-BootstrapPlainExistingFile $launcher 'PortableApps launcher'
+        $core = Assert-BootstrapPlainExistingFile $core 'PotPlayer core executable'
+    } catch {
+        return [pscustomobject]@{ valid = $false; reason = $_.Exception.Message; target = $target; launcher = $launcher; coreExecutable = $core }
+    }
+    return [pscustomobject]@{
+        valid = $true
+        reason = ''
+        target = $target
+        launcher = $launcher
+        coreExecutable = $core
+        launcherSha256 = Get-BootstrapFileSha256 $launcher
+        coreExecutableSha256 = Get-BootstrapFileSha256 $core
+    }
+}
+
+function Get-BootstrapAuthenticodeInfo([string]$Path) {
+    try {
+        $signature = Get-AuthenticodeSignature -FilePath $Path -ErrorAction Stop
+        $subject = if ($null -ne $signature.SignerCertificate) { [string]$signature.SignerCertificate.Subject } else { '' }
+        $thumbprint = if ($null -ne $signature.SignerCertificate) { [string]$signature.SignerCertificate.Thumbprint } else { '' }
+        return [pscustomobject]@{ status = [string]$signature.Status; subject = $subject; thumbprint = $thumbprint }
+    } catch {
+        return [pscustomobject]@{ status = 'unavailable'; subject = ''; thumbprint = ''; error = $_.Exception.Message }
+    }
+}
+
+function Test-BootstrapPortableHandoffCompletion($Context, $Item, $Result) {
+    $details = Get-BootstrapObjectProperty $Result 'details'
+    $portableAppsRoot = [string](Get-BootstrapObjectProperty $details 'portableAppsRoot')
+    $userPhaseRoot = [string](Get-BootstrapObjectProperty $details 'userPhaseRoot')
+    if ([string]::IsNullOrWhiteSpace($portableAppsRoot) -or [string]::IsNullOrWhiteSpace($userPhaseRoot)) { return $false }
+    try {
+        $expectedRoot = Get-BootstrapUserPhaseStateRoot $Context.RunId
+        if ([IO.Path]::GetFullPath($userPhaseRoot) -ine [IO.Path]::GetFullPath($expectedRoot)) { return $false }
+        $archive = Get-BootstrapPortableHandoffArchivePath $userPhaseRoot $Item
+        $archive = Assert-BootstrapPlainExistingFile $archive 'PortableApps archive'
+        $expected = ([string](Get-BootstrapObjectProperty $Item 'checksum') -replace '(?i)^sha256:', '').ToLowerInvariant()
+        if ((Get-BootstrapFileSha256 $archive) -ne $expected) { return $false }
+        $layout = Get-BootstrapPortableHandoffLayout $Item $portableAppsRoot
+        if (-not [bool]$layout.valid) { return $false }
+        foreach ($field in @('launcherSha256', 'coreExecutableSha256')) {
+            $recorded = [string](Get-BootstrapObjectProperty $details $field)
+            $live = [string](Get-BootstrapObjectProperty $layout $field)
+            if ([string]::IsNullOrWhiteSpace($recorded) -or $recorded -notmatch '^[0-9a-f]{64}$' -or $recorded -cne $live) { return $false }
+        }
+        return $true
+    } catch { return $false }
+}
+
+function Install-BootstrapPortableHandoff($Context, $Item, [string]$PortableAppsRoot, [switch]$Launch, [switch]$Confirm) {
+    if ($Context.DryRun) {
+        return [pscustomobject]@{ status = 'skipped'; message = 'Dry run: PortableApps download and interactive handoff not executed'; details = @{ url = [string]$Item.url; dryRun = $true } }
+    }
+    if ([string]$Item.checksum -notmatch '(?i)^sha256:([0-9a-f]{64})$') {
+        return [pscustomobject]@{ status = 'failed_uncleaned'; message = "Invalid PortableApps checksum policy: $($Item.checksum)"; details = $Item }
+    }
+    $expected = $Matches[1].ToLowerInvariant()
+    $uri = [Uri]([string]$Item.url)
+    $archive = Get-BootstrapPortableHandoffArchivePath $Context.StateRoot $Item -EnsureDirectory
+    if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) {
+        $temporary = "$archive.download"
+        try {
+            Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+            Invoke-WebRequest -Uri $uri.AbsoluteUri -OutFile $temporary -UseBasicParsing -TimeoutSec 900 -ErrorAction Stop
+            $actual = Get-BootstrapFileSha256 $temporary
+            if ($actual -ne $expected) {
+                Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+                return [pscustomobject]@{ status = 'failed_cleaned'; message = "PortableApps archive SHA-256 mismatch: $actual"; details = @{ url = $uri.AbsoluteUri; expected = $expected; actual = $actual } }
+            }
+            Move-Item -LiteralPath $temporary -Destination $archive -Force -ErrorAction Stop
+        } catch {
+            Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+            return [pscustomobject]@{ status = 'failed_cleaned'; message = "PortableApps download failed: $($_.Exception.Message)"; details = @{ url = $uri.AbsoluteUri; archive = $archive } }
+        }
+    }
+    $archive = Assert-BootstrapPlainExistingFile $archive 'PortableApps archive'
+    $actual = Get-BootstrapFileSha256 $archive
+    if ($actual -ne $expected) {
+        Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue
+        return [pscustomobject]@{ status = 'failed_cleaned'; message = "Cached PortableApps archive SHA-256 mismatch: $actual"; details = @{ archive = $archive; expected = $expected; actual = $actual } }
+    }
+    $signature = Get-BootstrapAuthenticodeInfo $archive
+    $layout = Get-BootstrapPortableHandoffLayout $Item $PortableAppsRoot
+    $details = [ordered]@{
+        url = $uri.AbsoluteUri
+        archive = $archive
+        sha256 = $expected
+        signature = $signature
+        portableAppsRoot = $PortableAppsRoot
+        userPhaseRoot = $Context.StateRoot
+        launcherSha256 = [string](Get-BootstrapObjectProperty $layout 'launcherSha256')
+        coreExecutableSha256 = [string](Get-BootstrapObjectProperty $layout 'coreExecutableSha256')
+        layout = $layout
+    }
+    if ($layout.valid -and $Confirm) {
+        return [pscustomobject]@{ status = 'completed'; message = 'Interactive PortableApps deployment explicitly confirmed; launcher and core executable verified'; details = [pscustomobject]$details }
+    }
+    if ($layout.valid) {
+        return [pscustomobject]@{ status = 'manual_required'; message = 'PortableApps layout exists, but user confirmation is required before recording interactive deployment as complete'; details = [pscustomobject]$details }
+    }
+    if ($Launch) {
+        if ([string]::IsNullOrWhiteSpace($PortableAppsRoot)) {
+            return [pscustomobject]@{ status = 'manual_required'; message = 'PortableApps archive verified; select -PortableAppsRoot before explicitly launching its interactive installer'; details = [pscustomobject]$details }
+        }
+        if ([string]$signature.status -in @('HashMismatch', 'NotTrusted', 'UnknownError')) {
+            return [pscustomobject]@{ status = 'manual_required'; message = "PortableApps archive hash is verified, but Authenticode status '$($signature.status)' blocks automatic launch; inspect it manually"; details = [pscustomobject]$details }
+        }
+        try {
+            $process = Start-Process -FilePath $archive -PassThru -ErrorAction Stop
+            $details.launchPid = [int]$process.Id
+            return [pscustomobject]@{ status = 'manual_required'; message = 'Verified PortableApps installer launched interactively; choose the requested destination, then rerun with -ConfirmPortableHandoff to verify the layout'; details = [pscustomobject]$details }
+        } catch {
+            return [pscustomobject]@{ status = 'manual_required'; message = "PortableApps archive verified but interactive launch failed: $($_.Exception.Message)"; details = [pscustomobject]$details }
+        }
+    }
+    return [pscustomobject]@{ status = 'manual_required'; message = 'PortableApps archive downloaded and SHA-256 verified; inspect it and explicitly launch the interactive installer when ready' ; details = [pscustomobject]$details }
 }
 
 function Get-BootstrapRimeConfigCompatibility([string]$TargetRoot) {
@@ -1694,6 +2223,7 @@ function Test-BootstrapComponentStillComplete($Context, $Item) {
             }
             'font' { return (Test-BootstrapFontCompletion $Context $result) }
             'download' { return (Test-BootstrapDownloadCompletion $result) }
+            'portable-handoff' { return (Test-BootstrapPortableHandoffCompletion $Context $Item $result) }
             'powershell-profile' { return (Test-BootstrapPowerShellProfileCompletion $Context) }
             'rime' { return (Test-BootstrapRimeCompletion $result) }
             'input-method' { return (Test-BootstrapInputMethodCompletion $result) }

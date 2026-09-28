@@ -362,33 +362,37 @@
     },
     {
       "name": "PotPlayer",
-      "mode": "manual",
+      "mode": "portable-handoff",
       "wingetId": "Daum.PotPlayer",
-      "version": "manual-review",
+      "version": "1.7.22980",
       "architecture": "x64",
+      "executionContext": "user",
+      "url": "https://download2.portableapps.com/portableapps/PotPlayerPortable/PotPlayerPortable_1.7.22980.paf.exe",
       "silentInstallArgs": [],
       "uninstallCommand": {"type": "manual", "args": []},
-      "source": "winget:Daum.PotPlayer",
-      "checksum": "manual-review",
-      "verification": {"type": "manual", "command": "Daum.PotPlayer", "args": [], "expected": "interactive installation required"},
-      "installerType": "nullsoft",
+      "source": "portableapps:https://portableapps.com/apps/music_video/potplayer-portable",
+      "homepage": "https://portableapps.com/apps/music_video/potplayer-portable",
+      "checksum": "sha256:9c6b0364be94af7bbd117dd05df7485dfd965ee8785e44af6a0129c745f21913",
+      "verification": {"type": "portable-layout", "launcher": "PotPlayerPortable.exe", "coreExecutable": "App\\PotPlayer\\PotPlayerMini64.exe", "expected": "user-confirmed interactive PortableApps deployment"},
+      "portableDirectory": "PotPlayerPortable",
+      "installerType": "portableapps-paf",
       "cleanupMode": "manual",
-      "reason": "WinGet silent installation stalls in the interactive installer; tested with default switches and --override /S. Install manually in an interactive user session."
+      "reason": "PortableApps.com package is pinned and SHA-256 verified, but its installer has no verified silent contract. The bootstrap only downloads/verifies it; GUI launch and deployment completion require explicit user confirmation."
     },
     {
       "name": "Spotify",
-      "mode": "manual",
+      "mode": "winget",
       "wingetId": "Spotify.Spotify",
-      "version": "manual-review",
+      "version": "winget-latest-stable",
       "architecture": "x64",
-      "silentInstallArgs": [],
-      "uninstallCommand": {"type": "manual", "args": []},
+      "executionContext": "user",
+      "silentInstallArgs": ["--silent", "--accept-source-agreements", "--accept-package-agreements", "--disable-interactivity", "--scope", "user"],
+      "uninstallCommand": {"type": "winget", "args": ["uninstall", "--id", "{wingetId}", "--exact", "--silent", "--accept-source-agreements", "--disable-interactivity"]},
       "source": "winget:Spotify.Spotify",
-      "checksum": "manual-review",
-      "verification": {"type": "manual", "command": "Spotify.Spotify", "args": [], "expected": "interactive user installation required"},
+      "checksum": "winget-source-signed",
+      "verification": {"type": "winget-list", "command": "Spotify.Spotify", "args": [], "expected": "installed in normal-user WinGet list"},
       "installerType": "exe",
-      "cleanupMode": "manual",
-      "reason": "WinGet installer refuses an administrator context and the Microsoft Store package is unavailable in the test guest. Install manually as the interactive user."
+      "cleanupMode": "winget-uninstall-if-new"
     }
   ]
 }
