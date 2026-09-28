@@ -7,6 +7,7 @@ trap 'rm -rf "$TMP_ROOT"' EXIT
 
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 assert_contains() { grep -Fq -- "$2" "$1" || fail "$1 missing <$2>"; }
+assert_not_contains() { if grep -Fq -- "$2" "$1"; then fail "$1 unexpectedly contains <$2>"; fi; }
 assert_eq() { [[ "$1" == "$2" ]] || fail "expected <$2>, got <$1>"; }
 
 mkdir -p "$TMP_ROOT/bin" "$TMP_ROOT/fake-repo/windows-bootstrap"
@@ -43,6 +44,7 @@ printf 'case: Windows shell converts root and forwards args\n'
 : > "$TMP_ROOT/log"
 PATH="$TMP_ROOT/bin:$PATH" BOOTSTRAP_LOG="$TMP_ROOT/log" RIME_BOOTSTRAP_UNAME=MINGW64 "$DISPATCHER" --root 'C:\Program Files\Rime' 'a;b'
 assert_contains "$TMP_ROOT/log" 'pwsh:-NoProfile -ExecutionPolicy Bypass -File C:\fixture path\windows-bootstrap\install.ps1 --root C:\Program Files\Rime a;b'
+assert_not_contains "$TMP_ROOT/log" 'darwin:'
 
 printf 'case: Windows falls back to Windows PowerShell when pwsh is missing\n'
 mkdir -p "$TMP_ROOT/bin51"

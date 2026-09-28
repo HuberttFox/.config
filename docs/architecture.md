@@ -4,6 +4,10 @@
 
 This document describes the installer pipeline, component model, transaction system, Zsh policy, and repository scope.
 
+## Platform dispatch
+
+[`bootstrap.sh`](../bootstrap.sh) is the unified entry and contains routing only: Darwin delegates to `install.sh`, Windows Git Bash/MSYS2/Cygwin forwards to `windows-bootstrap/install.ps1`, and Linux/WSL is rejected with status `2`. Platform entries are standalone — the Windows flow never loads macOS code (and vice versa) — and shared content is limited to documentation and concept names. The platform-native entries stay directly runnable for CI and recovery, and the dispatcher never parses platform business logic beyond the routing decision.
+
 ## Installer pipeline
 
 `install.sh` (with shared libraries under `scripts/lib/`) drives the whole run.

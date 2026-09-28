@@ -4,6 +4,10 @@
 
 本文档描述安装流程、组件模型、事务系统、Zsh 策略与仓库范围。
 
+## 平台调度
+
+[`bootstrap.sh`](../bootstrap.sh) 是统一入口，只负责路由：Darwin 委派 `install.sh`，Windows Git Bash/MSYS2/Cygwin 转发到 `windows-bootstrap/install.ps1`，Linux/WSL 返回状态 `2`。平台入口彼此独立——Windows 流程不加载 macOS 代码（反之亦然）——共享内容限于文档与概念命名。平台原生入口保持可直接运行，供 CI 与恢复使用；调度器除路由判断外不包含任何平台业务逻辑。
+
 ## 安装流程
 
 `install.sh`（配合 `scripts/lib/` 下的共享库）驱动整个运行过程。
