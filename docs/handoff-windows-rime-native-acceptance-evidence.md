@@ -102,6 +102,17 @@ The old `RimeAcceptance` tree and canonical `config-rime\rime.json` were restore
 - Windows PowerShell 5.1 `-Report`: JSON parsed and contained no escaped `\u001b`.
 - `native-bootstrap-verify-04b.json`: fresh Verify/Report evidence preserves `phase=initialized` for Verify rather than falsely claiming completion.
 
+### Optional-group verification (2026-09-28)
+
+A fresh `-Profile Optional` run in the same disposable guest finished with 13 `completed` components and 3 `manual_required` components (Spotify, PotPlayer, dwall); no failures. Artifacts: `evidence/final-acceptance-06/bootstrap/optional-verify/report.json`, `probe.json`, and `state.json`.
+
+- Installed and verified by the bootstrap: Obsidian, Typora (`appmakes.Typora`), Thunderbird, Telegram, Steam, CC-Switch, Clash Verge Rev, Zen Browser, Raycast (Microsoft Store), Baidu Netdisk, Quark Netdisk, Geek Uninstaller, and Eudic; the new base item lazygit passed the per-item probe.
+- `Typora.Typora` no longer exists in the WinGet source; the manifest now pins `appmakes.Typora`.
+- `Spotify.Spotify` refuses an administrator context and the Microsoft Store package is unavailable in the guest, so Spotify is `manual_required`.
+- `Daum.PotPlayer` stalls in its interactive installer even with `--override /S`, so PotPlayer is `manual_required`.
+- The first attempt exposed an unbounded WinGet hang; `Invoke-BootstrapExternal` now enforces timeouts (900 s install, 300 s uninstall) and kills the process tree on timeout.
+- The `final-verification` step reported only the WSL gap (`manual_required`) for this Optional-only run.
+
 ## RIME Track A and native safety evidence
 
 - Track A profile staging completed for Ice, Mint, and Moqi with pinned archives and overlays. Managed-file edits were preserved as `manual_required`; forged/unowned manifests failed closed before destructive work. Evidence: `evidence/final-acceptance-06/rime/1038-trackA-run.json` and `evidence/final-acceptance-06/rime/1039-trackA345.json`.

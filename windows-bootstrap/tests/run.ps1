@@ -89,6 +89,17 @@ try {
         Assert-Test ((Get-BootstrapWingetSource ([pscustomobject]@{ source = 'winget:Example.Package'; wingetSource = 'msstore' })) -eq 'msstore') 'explicit wingetSource override did not win'
     }
 
+    Invoke-TestCase 'external process timeout is enforced and reported' {
+        if ([Environment]::OSVersion.Platform -eq 'Win32NT') {
+            $started = Get-Date
+            $result = Invoke-BootstrapExternal (Join-Path $env:SystemRoot 'System32\ping.exe') @('-n', '30', '127.0.0.1') -TimeoutSeconds 2
+            $elapsed = ((Get-Date) - $started).TotalSeconds
+            Assert-Test ($result.ExitCode -eq 124) "timeout exit code was $($result.ExitCode)"
+            Assert-Test ($elapsed -lt 20) "timeout did not return promptly: $elapsed seconds"
+            Assert-Test ($result.Output -match 'Timed out') 'timeout note missing from output'
+        }
+    }
+
     Invoke-TestCase 'Windows 11 detection accepts registry Windows 10 label by build' {
         Assert-Test (Test-BootstrapWindows11 'Windows 10 Pro' '26200') 'Windows 11 build with legacy ProductName was rejected'
         Assert-Test (-not (Test-BootstrapWindows11 'Windows Server 2025' '26200')) 'Windows Server was accepted as Windows 11'

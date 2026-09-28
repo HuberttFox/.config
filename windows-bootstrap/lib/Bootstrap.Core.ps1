@@ -541,12 +541,22 @@ function ConvertTo-BootstrapProcessArgument([string]$Argument) {
     return '"' + $escaped + '"'
 }
 
-function Invoke-BootstrapExternal([string]$FilePath, [string[]]$Arguments) {
+function Stop-BootstrapProcessTree($Process) {
+    if ($null -eq $Process) { return }
+    $processId = $Process.Id
+    try { if (-not $Process.HasExited) { $Process.Kill() } } catch { }
+    try { & taskkill.exe /T /F /PID $processId 2>&1 | Out-Null } catch { }
+}
+
+function Invoke-BootstrapExternal([string]$FilePath, [string[]]$Arguments, [int]$TimeoutSeconds = 0) {
     # wsl.exe writes redirected streams as UTF-16LE. Direct invocation lets the
     # host shell decode those bytes with its native-command code page, producing
     # NUL padding or corrupted diagnostics. Use explicit stream encoding only
     # for WSL; retain normal PowerShell native invocation for other tools.
-    if ([IO.Path]::GetFileName($FilePath) -ieq 'wsl.exe') {
+    # A positive TimeoutSeconds forces the redirected path so a stalled
+    # installer can be killed instead of blocking the whole run.
+    $useProcess = ([IO.Path]::GetFileName($FilePath) -ieq 'wsl.exe') -or $TimeoutSeconds -gt 0
+    if ($useProcess) {
         $startInfo = New-Object Diagnostics.ProcessStartInfo
         $startInfo.FileName = $FilePath
         $startInfo.UseShellExecute = $false
@@ -559,21 +569,35 @@ function Invoke-BootstrapExternal([string]$FilePath, [string[]]$Arguments) {
         } else {
             $startInfo.Arguments = (@($Arguments) | ForEach-Object { ConvertTo-BootstrapProcessArgument ([string]$_) }) -join ' '
         }
-        $startInfo.StandardOutputEncoding = [Text.Encoding]::Unicode
-        $startInfo.StandardErrorEncoding = [Text.Encoding]::Unicode
+        if ([IO.Path]::GetFileName($FilePath) -ieq 'wsl.exe') {
+            $startInfo.StandardOutputEncoding = [Text.Encoding]::Unicode
+            $startInfo.StandardErrorEncoding = [Text.Encoding]::Unicode
+        }
         $process = New-Object Diagnostics.Process
         $process.StartInfo = $startInfo
         try {
             if (-not $process.Start()) { throw "Could not start external process: $FilePath" }
             $stdoutTask = $process.StandardOutput.ReadToEndAsync()
             $stderrTask = $process.StandardError.ReadToEndAsync()
-            $process.WaitForExit()
-            $stdout = $stdoutTask.Result
-            $stderr = $stderrTask.Result
+            $timedOut = $false
+            if ($TimeoutSeconds -gt 0) {
+                if (-not $process.WaitForExit([int]($TimeoutSeconds * 1000))) {
+                    $timedOut = $true
+                    Stop-BootstrapProcessTree $process
+                }
+            } else {
+                $process.WaitForExit()
+            }
+            $stdout = ''
+            $stderr = ''
+            try { $stdout = $stdoutTask.Result } catch { }
+            try { $stderr = $stderrTask.Result } catch { }
             $parts = @()
             if (-not [string]::IsNullOrEmpty($stdout)) { $parts += $stdout }
             if (-not [string]::IsNullOrEmpty($stderr)) { $parts += $stderr }
-            return [pscustomobject]@{ ExitCode = [int]$process.ExitCode; Output = (ConvertTo-BootstrapSafeText ($parts -join [Environment]::NewLine)) }
+            $exitCode = if ($timedOut) { 124 } else { [int]$process.ExitCode }
+            if ($timedOut) { $parts += "Timed out after $TimeoutSeconds seconds" }
+            return [pscustomobject]@{ ExitCode = $exitCode; Output = (ConvertTo-BootstrapSafeText ($parts -join [Environment]::NewLine)) }
         } finally {
             $process.Dispose()
         }
@@ -650,7 +674,7 @@ function Invoke-BootstrapWingetInstall($Context, $Item, [string]$Winget) {
     foreach ($argument in @($Item.silentInstallArgs)) {
         if (-not [string]::IsNullOrWhiteSpace([string]$argument)) { $args += [string]$argument }
     }
-    $result = Invoke-BootstrapExternal $Winget $args
+    $result = Invoke-BootstrapExternal $Winget $args -TimeoutSeconds 900
     Write-BootstrapLog $Context ("winget $($Item.wingetId): $($result.Output)")
     if ($result.ExitCode -eq 0 -and (Test-BootstrapWingetInstalled $Winget ([string]$Item.wingetId))) {
         $Context.State.installedPackages = @($Context.State.installedPackages) + [pscustomobject]@{ id = $Item.wingetId; name = $Item.name; before = $false; at = [DateTime]::UtcNow.ToString('o') }
@@ -668,7 +692,7 @@ function Invoke-BootstrapWingetInstall($Context, $Item, [string]$Winget) {
                 if (-not [string]::IsNullOrWhiteSpace([string]$argument)) { $removeArgs += ([string]$argument -replace '\{wingetId\}', [string]$Item.wingetId) }
             }
         }
-        $remove = Invoke-BootstrapExternal $Winget $removeArgs
+        $remove = Invoke-BootstrapExternal $Winget $removeArgs -TimeoutSeconds 300
         $cleanup = if ($remove.ExitCode -eq 0 -and -not (Test-BootstrapWingetInstalled $Winget ([string]$Item.wingetId))) { 'removed' } else { 'incomplete' }
         $Context.State.cleanup = @($Context.State.cleanup) + [pscustomobject]@{ name = $Item.name; action = 'winget-uninstall'; status = $cleanup }
         Save-BootstrapContext $Context

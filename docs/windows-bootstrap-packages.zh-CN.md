@@ -30,6 +30,7 @@
 
 - `winget` — 先 `winget list --id <id> --exact`。已安装 → `completed`，绝不改动。否则 `winget install --id <id> --exact --source <winget|msstore> <silentInstallArgs>`，再复查。源默认 `winget`；`wingetSource: msstore`（或 `source: msstore:<productId>` 前缀）选择 Microsoft Store 源，用于 Raycast。已有软件绝不卸载或升级。
 - 失败清理 — 安装失败但包已注册时，`cleanupMode: winget-uninstall-if-new` 立即卸载：卸载成功记 `failed_cleaned`，否则 `failed_uncleaned`。
+- 超时 — WinGet 安装与卸载都有上限（安装 900 秒、卸载 300 秒）。卡死的进程树会被终止并记为失败，而不是阻塞整个运行。
 - `manual` — 不安装、不下载。记录为 `manual_required` 并附 `reason`，运行继续。
 - 其他模式（WSL、字体、RIME 桥接、输入法、托管 profile）由专门的 bootstrap 函数执行。
 
@@ -61,12 +62,10 @@ WinGet 项 — 相同静默参数，用 `winget list` 验证，清理 `winget-un
 | 项目 | WinGet ID |
 | --- | --- |
 | Obsidian | `Obsidian.Obsidian` |
-| Typora | `Typora.Typora` |
+| Typora | `appmakes.Typora` |
 | Thunderbird | `Mozilla.Thunderbird` |
 | Telegram | `Telegram.TelegramDesktop` |
-| Spotify | `Spotify.Spotify` |
 | Steam | `Valve.Steam` |
-| PotPlayer | `Daum.PotPlayer` |
 | CC-Switch | `farion1231.CC-Switch` |
 | Clash Verge Rev | `ClashVergeRev.ClashVergeRev` |
 | Zen Browser | `Zen-Team.Zen-Browser` |
@@ -76,10 +75,12 @@ WinGet 项 — 相同静默参数，用 `winget list` 验证，清理 `winget-un
 | 欧路词典 | `EuSoft.Eudic` |
 | Geek Uninstaller | `GeekUninstaller.GeekUninstaller` |
 
-只剩 `dwall` 保持 `manual_required`——绝不自动安装，报告逐项记录原因：
+`manual_required` 项——绝不自动安装，报告逐项记录经验证的原因：
 
 | 项目 | 原因 |
 | --- | --- |
+| Spotify | WinGet 源安装器拒绝在管理员上下文运行，且测试环境无 Microsoft Store 包；请以交互用户手动安装 |
+| PotPlayer | WinGet 静默安装会挂在交互式安装器上（默认参数与 `--override /S` 均已验证） |
 | dwall | 仓库内没有稳定、经过审查的无人值守安装契约；其 GitHub release 安装包尚未实现为受管下载 |
 
 ## 修改清单

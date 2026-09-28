@@ -30,6 +30,7 @@ Mode behavior:
 
 - `winget` — `winget list --id <id> --exact` first. Already installed → `completed`, package left untouched. Otherwise `winget install --id <id> --exact --source <winget|msstore> <silentInstallArgs>`, then re-check with `winget list`. The source defaults to `winget`; `wingetSource: msstore` (or a `source: msstore:<productId>` prefix) selects the Microsoft Store source, used for Raycast. Existing packages are never uninstalled or upgraded.
 - Failure cleanup — when an install fails after the package became registered, `cleanupMode: winget-uninstall-if-new` removes it immediately; the component result is `failed_cleaned` if removal succeeded, otherwise `failed_uncleaned`.
+- Timeout — WinGet installs and uninstalls run under bounded timeouts (900 s install, 300 s uninstall). A stalled process tree is killed and recorded as a failure instead of blocking the run.
 - `manual` — nothing is installed or downloaded. The item is recorded as `manual_required` with its `reason`, and the run continues.
 - Non-WinGet modes are executed by dedicated bootstrap functions (WSL, font, RIME bridge, input method, managed profiles).
 
@@ -61,12 +62,10 @@ WinGet items — same silent arguments, verify via `winget list`, cleanup `winge
 | Item | WinGet ID |
 | --- | --- |
 | Obsidian | `Obsidian.Obsidian` |
-| Typora | `Typora.Typora` |
+| Typora | `appmakes.Typora` |
 | Thunderbird | `Mozilla.Thunderbird` |
 | Telegram | `Telegram.TelegramDesktop` |
-| Spotify | `Spotify.Spotify` |
 | Steam | `Valve.Steam` |
-| PotPlayer | `Daum.PotPlayer` |
 | CC-Switch | `farion1231.CC-Switch` |
 | Clash Verge Rev | `ClashVergeRev.ClashVergeRev` |
 | Zen Browser | `Zen-Team.Zen-Browser` |
@@ -76,10 +75,12 @@ WinGet items — same silent arguments, verify via `winget list`, cleanup `winge
 | Eudic | `EuSoft.Eudic` |
 | Geek Uninstaller | `GeekUninstaller.GeekUninstaller` |
 
-Only `dwall` remains `manual_required` — never installed automatically; the report carries its reason:
+`manual_required` items — never installed automatically; the report carries the verified reason:
 
 | Item | Reason |
 | --- | --- |
+| Spotify | The WinGet source installer refuses an administrator context and the Microsoft Store package is unavailable in the test environment; install manually as the interactive user |
+| PotPlayer | WinGet silent install stalls in the interactive installer (verified with the default switches and `--override /S`) |
 | dwall | No stable, reviewed unattended Windows package contract in the repository; its GitHub release installer is not yet a managed download |
 
 ## Changing the manifests
