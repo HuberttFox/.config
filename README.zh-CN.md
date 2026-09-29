@@ -48,7 +48,7 @@ pwsh.exe -NoProfile -File .\windows\install.ps1
 
 Windows Git Bash/MSYS2/Cygwin 下，[`bootstrap.sh`](bootstrap.sh) 是统一入口：转发到完整 Windows bootstrap（`windows-bootstrap/install.ps1`，优先 PowerShell 7，缺失时用 Windows PowerShell 5.1）；macOS 仍委派 `install.sh`；Linux/WSL 被拒绝。RIME 专用入口仍可直接使用 `windows/install.ps1`。
 
-参见 [Windows bootstrap 指南](windows-bootstrap/README.md)、[软件清单参考](docs/windows-bootstrap-packages.zh-CN.md)、[Windows RIME 指南](windows/README.zh-CN.md) 与 [原生验收证据](docs/handoff-windows-rime-native-acceptance-evidence.md)。便携测试不认证 Windows 原生 Registry、ACL、Junction、Weasel、进程隔离、reparse race 或 Raycast。
+参见 [Windows bootstrap 指南](windows-bootstrap/README.md)、[内建软件清单参考](docs/windows-bootstrap-packages.zh-CN.md)、[受限扩展指南](docs/windows-bootstrap-extensions.zh-CN.md)、[Windows RIME 指南](windows/README.zh-CN.md) 与 [原生验收证据](docs/handoff-windows-rime-native-acceptance-evidence.md)。便携测试不认证 Windows 原生 Registry、ACL、Junction、Weasel、进程隔离、reparse race 或 Raycast。
 
 ## 组件
 
@@ -70,6 +70,7 @@ Windows Git Bash/MSYS2/Cygwin 下，[`bootstrap.sh`](bootstrap.sh) 是统一入�
 - [故障排查](docs/troubleshooting.zh-CN.md) — 常见失败与修复
 - [密钥](docs/secrets.zh-CN.md) — `.env` 约定、渲染器、安全规则
 - [Windows bootstrap](windows-bootstrap/README.md) — 无人值守 Windows 11 入口、生命周期状态机与恢复语义
+- [Windows bootstrap 扩展](docs/windows-bootstrap-extensions.zh-CN.md) — 受限外部 manifest、计划批准与受保护 UAC/Resume provenance
 - [Windows RIME](windows/README.zh-CN.md) — 独立 Windows 11/PowerShell 7 x64 profile 部署与原生验收边界
 - [原生验收证据](docs/handoff-windows-rime-native-acceptance-evidence.md) — disposable Windows 11 guest 上的通过、阻塞与未验证项
 

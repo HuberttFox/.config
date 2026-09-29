@@ -12,7 +12,10 @@ function ConvertTo-BootstrapJsonText($Value) {
 
 function Read-BootstrapJson([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
-    return (Get-Content -LiteralPath $Path -Raw -ErrorAction Stop | ConvertFrom-Json)
+    $encoding = New-Object Text.UTF8Encoding($false, $true)
+    $text = [IO.File]::ReadAllText($Path, $encoding)
+    if ($text.Length -gt 0 -and $text[0] -eq [char]0xFEFF) { $text = $text.Substring(1) }
+    return ($text | ConvertFrom-Json -ErrorAction Stop)
 }
 
 function ConvertTo-BootstrapSafeText([string]$Text) {
@@ -64,6 +67,38 @@ function Get-BootstrapObjectProperty($Object, [string]$Name) {
     return $property.Value
 }
 
+function Get-BootstrapObjectPropertyRecord($Object, [string]$Name) {
+    $record = [ordered]@{ exists = $false; value = $null }
+    if ($null -eq $Object -or [string]::IsNullOrWhiteSpace($Name)) { return [pscustomobject]$record }
+    if ($Object -is [System.Collections.IDictionary]) {
+        if ($Object.Contains($Name)) {
+            $record.exists = $true
+            $record.value = $Object[$Name]
+        }
+        return [pscustomobject]$record
+    }
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -ne $property) {
+        $record.exists = $true
+        $record.value = $property.Value
+    }
+    return [pscustomobject]$record
+}
+
+function Set-BootstrapObjectProperty($Object, [string]$Name, $Value) {
+    if ($null -eq $Object -or [string]::IsNullOrWhiteSpace($Name)) { throw 'Bootstrap object property target is invalid' }
+    if ($Object -is [System.Collections.IDictionary]) {
+        $Object[$Name] = $Value
+        return
+    }
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property) {
+        $Object | Add-Member -NotePropertyName $Name -NotePropertyValue $Value
+    } else {
+        $property.Value = $Value
+    }
+}
+
 function ConvertTo-BootstrapUtcDateTime($Value) {
     if ($null -eq $Value) { throw 'Bootstrap timestamp is missing' }
     if ($Value -is [DateTimeOffset]) { return $Value.UtcDateTime }
@@ -73,6 +108,204 @@ function ConvertTo-BootstrapUtcDateTime($Value) {
             [Globalization.CultureInfo]::InvariantCulture,
             [Globalization.DateTimeStyles]::RoundtripKind
         )).ToUniversalTime()
+}
+
+function ConvertTo-BootstrapSha256Hex([string]$Value, [string]$Description = 'Bootstrap SHA-256') {
+    if ([string]::IsNullOrWhiteSpace($Value) -or $Value -notmatch '^[0-9a-fA-F]{64}$') {
+        throw "$Description must be a 64-character hexadecimal SHA-256 value"
+    }
+    return $Value.ToLowerInvariant()
+}
+
+function Assert-BootstrapJsonObject($Object, [string]$Description) {
+    if ($null -eq $Object -or $Object -is [string] -or $Object -is [ValueType] -or
+        (($Object -is [System.Collections.IEnumerable]) -and -not ($Object -is [System.Collections.IDictionary]))) {
+        throw "$Description must be a JSON object"
+    }
+    return $Object
+}
+
+function Get-BootstrapJsonObjectArray($Object, [string]$Name, [string]$Description) {
+    $property = Get-BootstrapObjectPropertyRecord $Object $Name
+    if (-not $property.exists) { throw "$Description must be a JSON array" }
+    $value = $property.value
+    if ($null -eq $value -or $value -is [string] -or $value -is [System.Collections.IDictionary] -or
+        -not ($value -is [System.Collections.IEnumerable])) {
+        throw "$Description must be a JSON array"
+    }
+    # Deliberately enumerate here. Every caller captures through @(...), which
+    # preserves both an empty JSON array and a one-element JSON array on PS 5.1.
+    return $value
+}
+
+function Assert-BootstrapRequiredString($Value, [string]$Description, [int]$MaximumLength = 256) {
+    if ($Value -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$Value)) {
+        throw "$Description must be a non-empty string"
+    }
+    $text = [string]$Value
+    if ($text.Length -gt $MaximumLength -or $text -match '[\x00-\x1f\x7f]') {
+        throw "$Description has an unsafe length or control character"
+    }
+    return $text
+}
+
+function ConvertTo-BootstrapBoundedInteger($Value, [string]$Description, [int]$Minimum, [int]$Maximum) {
+    if ($Value -isnot [sbyte] -and $Value -isnot [byte] -and $Value -isnot [int16] -and
+        $Value -isnot [uint16] -and $Value -isnot [int32] -and $Value -isnot [uint32] -and
+        $Value -isnot [int64]) {
+        throw "$Description must be an integer"
+    }
+    try { $number = [int64]$Value } catch { throw "$Description must be an integer" }
+    if ($number -lt $Minimum -or $number -gt $Maximum) {
+        throw "$Description must be between $Minimum and $Maximum"
+    }
+    return [int]$number
+}
+
+function Assert-BootstrapJsonBoolean($Value, [string]$Description) {
+    if ($Value -isnot [bool]) { throw "$Description must be a Boolean" }
+    return [bool]$Value
+}
+
+function Skip-BootstrapJsonDuplicateScanWhitespace([string]$Text, $Cursor) {
+    while ($Cursor.Index -lt $Text.Length) {
+        $code = [int][char]$Text[$Cursor.Index]
+        if ($code -notin @(9, 10, 13, 32)) { break }
+        $Cursor.Index++
+    }
+}
+
+function Read-BootstrapJsonDuplicateScanString([string]$Text, $Cursor, [string]$Description) {
+    if ($Cursor.Index -ge $Text.Length -or [int][char]$Text[$Cursor.Index] -ne 34) {
+        throw "$Description has an invalid JSON object field"
+    }
+    $Cursor.Index++
+    $builder = New-Object Text.StringBuilder
+    while ($Cursor.Index -lt $Text.Length) {
+        $character = $Text[$Cursor.Index]
+        $Cursor.Index++
+        $code = [int][char]$character
+        if ($code -eq 34) { return $builder.ToString() }
+        if ($code -lt 32) { throw "$Description has an invalid control character in a JSON string" }
+        if ($code -ne 92) {
+            [void]$builder.Append($character)
+            continue
+        }
+        if ($Cursor.Index -ge $Text.Length) { throw "$Description has an unterminated JSON escape" }
+        $escapeCode = [int][char]$Text[$Cursor.Index]
+        $Cursor.Index++
+        switch ($escapeCode) {
+            34 { [void]$builder.Append([char]34); break }
+            47 { [void]$builder.Append([char]47); break }
+            92 { [void]$builder.Append([char]92); break }
+            98 { [void]$builder.Append([char]8); break }
+            102 { [void]$builder.Append([char]12); break }
+            110 { [void]$builder.Append([char]10); break }
+            114 { [void]$builder.Append([char]13); break }
+            116 { [void]$builder.Append([char]9); break }
+            117 {
+                if ($Cursor.Index + 4 -gt $Text.Length) { throw "$Description has an incomplete JSON Unicode escape" }
+                $hex = $Text.Substring($Cursor.Index, 4)
+                if ($hex -notmatch '^[0-9A-Fa-f]{4}$') { throw "$Description has an invalid JSON Unicode escape" }
+                [void]$builder.Append([char]([Convert]::ToInt32($hex, 16)))
+                $Cursor.Index += 4
+                break
+            }
+            default { throw "$Description has an invalid JSON escape" }
+        }
+    }
+    throw "$Description has an unterminated JSON string"
+}
+
+function Read-BootstrapJsonDuplicateScanValue([string]$Text, $Cursor, [string]$Description, [int]$Depth) {
+    if ($Depth -gt 64) { throw "$Description exceeds the maximum JSON nesting depth" }
+    Skip-BootstrapJsonDuplicateScanWhitespace $Text $Cursor
+    if ($Cursor.Index -ge $Text.Length) { throw "$Description has an incomplete JSON value" }
+    $code = [int][char]$Text[$Cursor.Index]
+    if ($code -eq 123) {
+        Read-BootstrapJsonDuplicateScanObject $Text $Cursor $Description ($Depth + 1)
+        return
+    }
+    if ($code -eq 91) {
+        Read-BootstrapJsonDuplicateScanArray $Text $Cursor $Description ($Depth + 1)
+        return
+    }
+    if ($code -eq 34) {
+        [void](Read-BootstrapJsonDuplicateScanString $Text $Cursor $Description)
+        return
+    }
+    $start = $Cursor.Index
+    while ($Cursor.Index -lt $Text.Length) {
+        $current = [int][char]$Text[$Cursor.Index]
+        if ($current -in @(9, 10, 13, 32, 44, 93, 125)) { break }
+        $Cursor.Index++
+    }
+    if ($Cursor.Index -eq $start) { throw "$Description has an invalid JSON value" }
+}
+
+function Read-BootstrapJsonDuplicateScanObject([string]$Text, $Cursor, [string]$Description, [int]$Depth) {
+    if ($Cursor.Index -ge $Text.Length -or [int][char]$Text[$Cursor.Index] -ne 123) {
+        throw "$Description has an invalid JSON object"
+    }
+    $Cursor.Index++
+    Skip-BootstrapJsonDuplicateScanWhitespace $Text $Cursor
+    if ($Cursor.Index -lt $Text.Length -and [int][char]$Text[$Cursor.Index] -eq 125) {
+        $Cursor.Index++
+        return
+    }
+    $fields = New-Object -TypeName 'System.Collections.Generic.HashSet[string]' -ArgumentList ([StringComparer]::OrdinalIgnoreCase)
+    while ($true) {
+        Skip-BootstrapJsonDuplicateScanWhitespace $Text $Cursor
+        $field = Read-BootstrapJsonDuplicateScanString $Text $Cursor $Description
+        if (-not $fields.Add($field)) { throw "$Description has a duplicate JSON field: $field" }
+        Skip-BootstrapJsonDuplicateScanWhitespace $Text $Cursor
+        if ($Cursor.Index -ge $Text.Length -or [int][char]$Text[$Cursor.Index] -ne 58) {
+            throw "$Description has an invalid JSON object field separator"
+        }
+        $Cursor.Index++
+        Read-BootstrapJsonDuplicateScanValue $Text $Cursor $Description $Depth
+        Skip-BootstrapJsonDuplicateScanWhitespace $Text $Cursor
+        if ($Cursor.Index -ge $Text.Length) { throw "$Description has an unterminated JSON object" }
+        $separator = [int][char]$Text[$Cursor.Index]
+        if ($separator -eq 125) {
+            $Cursor.Index++
+            return
+        }
+        if ($separator -ne 44) { throw "$Description has an invalid JSON object separator" }
+        $Cursor.Index++
+    }
+}
+
+function Read-BootstrapJsonDuplicateScanArray([string]$Text, $Cursor, [string]$Description, [int]$Depth) {
+    if ($Cursor.Index -ge $Text.Length -or [int][char]$Text[$Cursor.Index] -ne 91) {
+        throw "$Description has an invalid JSON array"
+    }
+    $Cursor.Index++
+    Skip-BootstrapJsonDuplicateScanWhitespace $Text $Cursor
+    if ($Cursor.Index -lt $Text.Length -and [int][char]$Text[$Cursor.Index] -eq 93) {
+        $Cursor.Index++
+        return
+    }
+    while ($true) {
+        Read-BootstrapJsonDuplicateScanValue $Text $Cursor $Description $Depth
+        Skip-BootstrapJsonDuplicateScanWhitespace $Text $Cursor
+        if ($Cursor.Index -ge $Text.Length) { throw "$Description has an unterminated JSON array" }
+        $separator = [int][char]$Text[$Cursor.Index]
+        if ($separator -eq 93) {
+            $Cursor.Index++
+            return
+        }
+        if ($separator -ne 44) { throw "$Description has an invalid JSON array separator" }
+        $Cursor.Index++
+    }
+}
+
+function Assert-BootstrapJsonHasNoDuplicateObjectFields([string]$Text, [string]$Description) {
+    if ($null -eq $Text) { throw "$Description is empty" }
+    $cursor = [pscustomobject]@{ Index = 0 }
+    Read-BootstrapJsonDuplicateScanValue $Text $cursor $Description 0
+    Skip-BootstrapJsonDuplicateScanWhitespace $Text $cursor
+    if ($cursor.Index -ne $Text.Length) { throw "$Description has trailing JSON content" }
 }
 
 function Write-BootstrapJson([string]$Path, $Value) {
@@ -357,25 +590,102 @@ function Protect-BootstrapUserPhaseHandoff([string]$Path, [string]$OwnerSid) {
     return Protect-BootstrapUserPhasePath $Path $OwnerSid
 }
 
+function Get-BootstrapCanonicalObjectPropertyNames($Object, [string]$Description) {
+    $names = @()
+    if ($Object -is [System.Collections.IDictionary]) {
+        $names = @($Object.Keys | ForEach-Object { [string]$_ })
+    } else {
+        $names = @($Object.PSObject.Properties | ForEach-Object { [string]$_.Name })
+    }
+    if ($names.Count -ne @($names | Select-Object -Unique).Count) { throw "$Description has duplicate property names" }
+    $ordered = [string[]]$names
+    [Array]::Sort($ordered, [StringComparer]::Ordinal)
+    return @($ordered)
+}
+
+function ConvertTo-BootstrapCanonicalJsonString([string]$Value) {
+    $builder = New-Object Text.StringBuilder
+    [void]$builder.Append('"')
+    foreach ($character in $Value.ToCharArray()) {
+        $code = [int][char]$character
+        switch ($code) {
+            8 { [void]$builder.Append('\b'); break }
+            9 { [void]$builder.Append('\t'); break }
+            10 { [void]$builder.Append('\n'); break }
+            12 { [void]$builder.Append('\f'); break }
+            13 { [void]$builder.Append('\r'); break }
+            34 { [void]$builder.Append('\"'); break }
+            92 { [void]$builder.Append('\\'); break }
+            default {
+                if ($code -lt 32 -or $code -gt 126) {
+                    [void]$builder.Append(('\u{0:x4}' -f $code))
+                } else {
+                    [void]$builder.Append($character)
+                }
+            }
+        }
+    }
+    [void]$builder.Append('"')
+    return $builder.ToString()
+}
+
+function ConvertTo-BootstrapCanonicalJsonText($Value) {
+    if ($null -eq $Value) { return 'null' }
+    if ($Value -is [string] -or $Value -is [char]) { return ConvertTo-BootstrapCanonicalJsonString ([string]$Value) }
+    if ($Value -is [bool]) {
+        if ([bool]$Value) { return 'true' }
+        return 'false'
+    }
+    if ($Value -is [DateTime]) { return ConvertTo-BootstrapCanonicalJsonString ($Value.ToUniversalTime().ToString('o', [Globalization.CultureInfo]::InvariantCulture)) }
+    if ($Value -is [DateTimeOffset]) { return ConvertTo-BootstrapCanonicalJsonString ($Value.ToUniversalTime().ToString('o', [Globalization.CultureInfo]::InvariantCulture)) }
+    if ($Value -is [ValueType]) {
+        if ($Value -is [double] -or $Value -is [single]) {
+            if ([double]::IsNaN([double]$Value) -or [double]::IsInfinity([double]$Value)) { throw 'Bootstrap canonical JSON cannot encode non-finite numbers' }
+        }
+        return [Convert]::ToString($Value, [Globalization.CultureInfo]::InvariantCulture)
+    }
+    if ($Value -is [System.Collections.IDictionary]) {
+        $entries = @()
+        foreach ($name in @(Get-BootstrapCanonicalObjectPropertyNames $Value 'Bootstrap canonical JSON object')) {
+            $property = Get-BootstrapObjectPropertyRecord $Value $name
+            $entries += ((ConvertTo-BootstrapCanonicalJsonString $name) + ':' + (ConvertTo-BootstrapCanonicalJsonText $property.value))
+        }
+        return '{' + ($entries -join ',') + '}'
+    }
+    if ($Value -is [System.Collections.IEnumerable]) {
+        $entries = @()
+        foreach ($entry in $Value) { $entries += (ConvertTo-BootstrapCanonicalJsonText $entry) }
+        return '[' + ($entries -join ',') + ']'
+    }
+    $entries = @()
+    foreach ($name in @(Get-BootstrapCanonicalObjectPropertyNames $Value 'Bootstrap canonical JSON object')) {
+        $property = Get-BootstrapObjectPropertyRecord $Value $name
+        $entries += ((ConvertTo-BootstrapCanonicalJsonString $name) + ':' + (ConvertTo-BootstrapCanonicalJsonText $property.value))
+    }
+    return '{' + ($entries -join ',') + '}'
+}
+
 function ConvertTo-BootstrapCanonicalJsonValue($Value) {
+    # Retained for callers that need a sorted object value. Hashing uses the
+    # explicit serializer above so PS 5.1 and PS 7 do not choose formatting.
     if ($null -eq $Value -or $Value -is [string] -or $Value -is [ValueType]) { return $Value }
     if ($Value -is [System.Collections.IDictionary]) {
         $record = [ordered]@{}
-        foreach ($name in @($Value.Keys | ForEach-Object { [string]$_ } | Sort-Object)) {
-            $record[$name] = ConvertTo-BootstrapCanonicalJsonValue (Get-BootstrapObjectProperty $Value $name)
+        foreach ($name in @(Get-BootstrapCanonicalObjectPropertyNames $Value 'Bootstrap canonical JSON object')) {
+            $property = Get-BootstrapObjectPropertyRecord $Value $name
+            $record[$name] = ConvertTo-BootstrapCanonicalJsonValue $property.value
         }
         return [pscustomobject]$record
     }
     if ($Value -is [System.Collections.IEnumerable]) {
         $values = @()
-        foreach ($entry in $Value) {
-            $values += ,(ConvertTo-BootstrapCanonicalJsonValue $entry)
-        }
+        foreach ($entry in $Value) { $values += ,(ConvertTo-BootstrapCanonicalJsonValue $entry) }
         return ,$values
     }
     $record = [ordered]@{}
-    foreach ($property in @($Value.PSObject.Properties | Sort-Object Name)) {
-        $record[[string]$property.Name] = ConvertTo-BootstrapCanonicalJsonValue $property.Value
+    foreach ($name in @(Get-BootstrapCanonicalObjectPropertyNames $Value 'Bootstrap canonical JSON object')) {
+        $property = Get-BootstrapObjectPropertyRecord $Value $name
+        $record[$name] = ConvertTo-BootstrapCanonicalJsonValue $property.value
     }
     return [pscustomobject]$record
 }
@@ -383,11 +693,8 @@ function ConvertTo-BootstrapCanonicalJsonValue($Value) {
 function Get-BootstrapUserPhaseManifestFingerprint($Items) {
     # This is carried by the user-phase handoff, but covers every selected
     # manifest item. The elevated child must reject a changed machine phase.
-    $payload = [ordered]@{
-        format = 1
-        selectedItems = ConvertTo-BootstrapCanonicalJsonValue @($Items)
-    }
-    $bytes = [Text.Encoding]::UTF8.GetBytes((ConvertTo-BootstrapJsonText $payload))
+    $payload = [ordered]@{ format = 1; selectedItems = @($Items) }
+    $bytes = [Text.Encoding]::UTF8.GetBytes((ConvertTo-BootstrapCanonicalJsonText $payload))
     $sha = [Security.Cryptography.SHA256]::Create()
     try {
         return (([BitConverter]::ToString($sha.ComputeHash($bytes))) -replace '-', '').ToLowerInvariant()
@@ -396,7 +703,7 @@ function Get-BootstrapUserPhaseManifestFingerprint($Items) {
     }
 }
 
-function Test-BootstrapUserPhaseHandoffData($Handoff, [string]$RunId, [string]$OwnerSid, $Items, [string]$ExpectedProfile = '') {
+function Test-BootstrapUserPhaseHandoffData($Handoff, [string]$RunId, [string]$OwnerSid, $Items, [string]$ExpectedProfile = '', [string]$ExpectedPackagePlanHash = '') {
     $invalid = {
         param([string]$Reason)
         return [pscustomobject]@{ valid = $false; reason = $Reason; results = @(); host = $null }
@@ -420,8 +727,15 @@ function Test-BootstrapUserPhaseHandoffData($Handoff, [string]$RunId, [string]$O
     if ($manifestFingerprint -cne (Get-BootstrapUserPhaseManifestFingerprint $Items)) {
         return & $invalid 'handoff manifest fingerprint does not match current selected items'
     }
+    if (-not [string]::IsNullOrWhiteSpace($ExpectedPackagePlanHash)) {
+        try {
+            $expectedPlanHash = ConvertTo-BootstrapSha256Hex $ExpectedPackagePlanHash 'Expected bootstrap package-plan hash'
+            $handoffPlanHash = ConvertTo-BootstrapSha256Hex ([string](Get-BootstrapObjectProperty $Handoff 'packagePlanHash')) 'User-phase handoff package-plan hash'
+            if ($handoffPlanHash -cne $expectedPlanHash) { return & $invalid 'handoff package-plan hash does not match current selected plan' }
+        } catch { return & $invalid 'handoff package-plan hash is invalid' }
+    }
     $handoffProfile = [string](Get-BootstrapObjectProperty $Handoff 'profile')
-    if ($handoffProfile -notin @('Base', 'Core', 'Optional', 'All')) { return & $invalid 'handoff profile is invalid' }
+    if ($handoffProfile -notin @('Base', 'Core', 'Optional', 'All', 'Extension')) { return & $invalid 'handoff profile is invalid' }
     if (-not [string]::IsNullOrWhiteSpace($ExpectedProfile) -and $handoffProfile -cne $ExpectedProfile) {
         return & $invalid 'handoff profile does not match current run'
     }
@@ -511,6 +825,7 @@ function New-BootstrapState([string]$StateRoot, [string]$RunId, [string]$Selecte
         languageSnapshotBefore = $null
         executionOptions = @{}
         userPhase = $null
+        packagePlan = $null
     }
 }
 
@@ -538,6 +853,7 @@ function New-BootstrapReport([string]$StateRoot, [string]$RunId, [string]$Select
         requiresReboot = $false
         resumeTask = $null
         userPhase = $null
+        packagePlan = $null
     }
 }
 
@@ -550,7 +866,7 @@ function Ensure-BootstrapStateShape($State) {
             $property.Value = @()
         }
     }
-    foreach ($name in @('languageSnapshotBefore', 'requiresReboot', 'resumeTask', 'nextPhase', 'executionOptions', 'installPolicy', 'userPhase')) {
+    foreach ($name in @('languageSnapshotBefore', 'requiresReboot', 'resumeTask', 'nextPhase', 'executionOptions', 'installPolicy', 'userPhase', 'packagePlan')) {
         if ($null -eq $State.PSObject.Properties[$name]) {
             $default = switch ($name) {
                 'languageSnapshotBefore' { $null }
@@ -574,7 +890,7 @@ function Ensure-BootstrapReportShape($Report) {
             $property.Value = @()
         }
     }
-    foreach ($name in @('host', 'finishedAt', 'requiresReboot', 'resumeTask', 'logPath', 'installPolicy', 'userPhase')) {
+    foreach ($name in @('host', 'finishedAt', 'requiresReboot', 'resumeTask', 'logPath', 'installPolicy', 'userPhase', 'packagePlan')) {
         if ($null -eq $Report.PSObject.Properties[$name]) {
             $default = if ($name -eq 'requiresReboot') { $false } else { $null }
             $Report | Add-Member -NotePropertyName $name -NotePropertyValue $default
@@ -708,6 +1024,15 @@ function New-BootstrapContext(
     }
     $logPath = Join-Path $logDirectory 'bootstrap.log'
     if ($null -ne $report) {
+        # Existing reports describe the original run. A read-only invocation
+        # must describe itself as dry-run without persisting that change.
+        if ($report -is [System.Collections.IDictionary]) {
+            $report['dryRun'] = [bool]$DryRun
+        } elseif ($null -ne $report.PSObject.Properties['dryRun']) {
+            $report.dryRun = [bool]$DryRun
+        } else {
+            $report | Add-Member -NotePropertyName 'dryRun' -NotePropertyValue ([bool]$DryRun)
+        }
         if ($report -is [System.Collections.IDictionary]) {
             $report['logPath'] = $logPath
         } elseif ($null -ne $report.PSObject.Properties['logPath']) {
@@ -766,6 +1091,7 @@ function Save-BootstrapContext($Context) {
     $Context.Report.requiresReboot = [bool]$Context.State.requiresReboot
     $Context.Report.resumeTask = $Context.State.resumeTask
     $Context.Report.userPhase = $Context.State.userPhase
+    $Context.Report.packagePlan = $Context.State.packagePlan
     $latest = @(Get-BootstrapLatestResults $Context.Report.results)
     $Context.Report.success = @($latest | Where-Object { $_.status -eq 'completed' })
     $Context.Report.failed = @($latest | Where-Object { $_.status -eq 'failed' })
@@ -867,6 +1193,22 @@ function Get-BootstrapTokenIntegritySid {
 function Test-BootstrapElevationRequired([bool]$IsAdministrator, [string]$Operation, [bool]$NoElevate) {
     if ($IsAdministrator -or $NoElevate) { return $false }
     return [string]$Operation -in @('Run', 'Resume', 'Verify', 'Cleanup')
+}
+
+function Get-BootstrapElevatedChildParameters($BoundParameters, [string]$SnapshotPath = '', [string]$ApprovedPlan = '') {
+    $parameters = @{}
+    foreach ($name in @($BoundParameters.Keys)) { $parameters[$name] = $BoundParameters[$name] }
+    # Never relay a normal-user writable external manifest into an elevated
+    # process. Snapshot/hash values are replaced as one provenance-bound pair.
+    foreach ($name in @('ExtensionManifest', 'PlanOnly', 'BootstrapPackagePlanPath', 'ApprovePlan')) {
+        [void]$parameters.Remove($name)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($SnapshotPath) -or -not [string]::IsNullOrWhiteSpace($ApprovedPlan)) {
+        if ([string]::IsNullOrWhiteSpace($SnapshotPath)) { throw 'Bootstrap elevated package-plan snapshot path is missing' }
+        $parameters['BootstrapPackagePlanPath'] = [IO.Path]::GetFullPath($SnapshotPath)
+        $parameters['ApprovePlan'] = ConvertTo-BootstrapSha256Hex $ApprovedPlan 'Bootstrap elevated package-plan approval hash'
+    }
+    return $parameters
 }
 
 function Get-BootstrapElevatedArguments([string]$ScriptPath, $BoundParameters) {
@@ -1161,6 +1503,617 @@ function Invoke-BootstrapExternal([string]$FilePath, [string[]]$Arguments, [int]
     return [pscustomobject]@{ ExitCode = $exitCode; Output = (ConvertTo-BootstrapSafeText ($output -join [Environment]::NewLine)) }
 }
 
+function Get-BootstrapOrdinalSortedStrings($Values) {
+    $sorted = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($value in @($Values)) {
+        $text = [string]$value
+        $index = 0
+        while ($index -lt $sorted.Count -and [StringComparer]::Ordinal.Compare($sorted[$index], $text) -le 0) {
+            $index++
+        }
+        $sorted.Insert($index, $text)
+    }
+    foreach ($text in $sorted) { Write-Output $text }
+}
+
+function Sort-BootstrapExtensionManifestRecords($Records) {
+    $byKey = @{}
+    foreach ($record in @($Records)) {
+        $id = [string](Get-BootstrapObjectProperty $record 'id')
+        $path = [string](Get-BootstrapObjectProperty $record 'path')
+        $key = $id + [char]0 + $path
+        if ($byKey.ContainsKey($key)) { throw "Bootstrap extension manifest record is duplicated: $path" }
+        $byKey[$key] = $record
+    }
+    foreach ($key in @(Get-BootstrapOrdinalSortedStrings @($byKey.Keys))) {
+        Write-Output $byKey[$key]
+    }
+}
+
+function Get-BootstrapProviderRegistry([string]$BootstrapRoot) {
+    $path = Assert-BootstrapPlainExistingFile (Join-Path $BootstrapRoot 'providers\registry.json') 'Bootstrap provider registry'
+    if ((Get-Item -LiteralPath $path -Force).Length -gt 262144) { throw "Bootstrap provider registry is too large: $path" }
+    $registry = Read-BootstrapJson $path
+    Assert-BootstrapJsonObject $registry 'Bootstrap provider registry' | Out-Null
+    Assert-BootstrapAllowedObjectFields $registry @('format', 'providers') 'Bootstrap provider registry'
+    if ((ConvertTo-BootstrapBoundedInteger (Get-BootstrapObjectProperty $registry 'format') 'Bootstrap provider registry format' 1 1) -ne 1) {
+        throw "Invalid bootstrap provider registry: $path"
+    }
+    $declaredProviders = @(Get-BootstrapJsonObjectArray $registry 'providers' 'Bootstrap provider registry providers')
+    if ($declaredProviders.Count -eq 0 -or $declaredProviders.Count -gt 16) { throw "Bootstrap provider registry has an invalid provider count: $path" }
+    $providers = @{}
+    foreach ($provider in $declaredProviders) {
+        Assert-BootstrapJsonObject $provider 'Bootstrap provider registry item' | Out-Null
+        Assert-BootstrapAllowedObjectFields $provider @('id', 'extensionAllowed', 'executionContexts') 'Bootstrap provider registry item'
+        $id = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $provider 'id') 'Bootstrap provider ID' 64
+        if ($id -cnotmatch '^[a-z][a-z0-9-]{0,63}$') { throw "Invalid bootstrap provider ID: $path" }
+        if ($providers.ContainsKey($id)) { throw "Duplicate bootstrap provider ID: $id" }
+        $extensionAllowed = Assert-BootstrapJsonBoolean (Get-BootstrapObjectProperty $provider 'extensionAllowed') "Bootstrap provider extensionAllowed for $id"
+        $contexts = @(Get-BootstrapJsonObjectArray $provider 'executionContexts' "Bootstrap provider execution contexts for $id")
+        if ($contexts.Count -eq 0 -or $contexts.Count -gt 2) { throw "Bootstrap provider has invalid execution contexts: $id" }
+        $contextKeys = @{}
+        foreach ($contextValue in $contexts) {
+            $context = Assert-BootstrapRequiredString $contextValue "Bootstrap provider execution context for $id" 16
+            if ($context -cnotin @('elevated', 'user') -or $contextKeys.ContainsKey($context)) {
+                throw "Bootstrap provider has invalid execution contexts: $id"
+            }
+            $contextKeys[$context] = $true
+        }
+        $providers[$id] = [pscustomobject]@{
+            id = $id
+            extensionAllowed = $extensionAllowed
+            executionContexts = @(Get-BootstrapOrdinalSortedStrings @($contextKeys.Keys))
+        }
+    }
+    return $providers
+}
+
+function Assert-BootstrapExtensionProviderAvailability($Items, [string]$BootstrapRoot = '') {
+    if ([string]::IsNullOrWhiteSpace($BootstrapRoot)) {
+        $BootstrapRoot = Get-BootstrapRoot (Get-BootstrapScriptRoot)
+    }
+    $providers = Get-BootstrapProviderRegistry $BootstrapRoot
+    foreach ($item in @($Items)) {
+        $providerId = [string](Get-BootstrapObjectProperty $item 'provider')
+        $context = [string](Get-BootstrapItemExecutionContext $item)
+        if (-not $providers.ContainsKey($providerId) -or $providerId -cne [string]$providers[$providerId].id -or
+            -not [bool]$providers[$providerId].extensionAllowed -or
+            $context -cnotin @($providers[$providerId].executionContexts)) {
+            throw "Bootstrap extension plan uses an unavailable provider/context: $providerId/$context"
+        }
+    }
+}
+
+function Get-BootstrapExtensionManifestPaths([string[]]$ExtensionManifest) {
+    if (@($ExtensionManifest).Count -gt 16) { throw 'Bootstrap accepts at most 16 extension manifests per plan' }
+    $paths = @()
+    foreach ($candidate in @($ExtensionManifest)) {
+        if ([string]::IsNullOrWhiteSpace([string]$candidate)) { continue }
+        $full = Assert-BootstrapPlainExistingFile ([string]$candidate) 'Bootstrap extension manifest'
+        if ([IO.Path]::GetExtension($full) -ine '.json') { throw "Bootstrap extension manifest must be JSON: $full" }
+        if (@($paths | Where-Object { $_ -ieq $full }).Count -gt 0) { throw "Bootstrap extension manifest was supplied more than once: $full" }
+        $paths += $full
+    }
+    return @(Get-BootstrapOrdinalSortedStrings $paths)
+}
+
+function Assert-BootstrapAllowedObjectFields($Object, [string[]]$Allowed, [string]$Description) {
+    if ($null -eq $Object) { throw "$Description is missing" }
+    $names = @()
+    if ($Object -is [System.Collections.IDictionary]) {
+        $names = @($Object.Keys | ForEach-Object { [string]$_ })
+    } else {
+        $names = @($Object.PSObject.Properties | ForEach-Object { [string]$_.Name })
+    }
+    $unexpected = @($names | Where-Object { $Allowed -cnotcontains $_ })
+    if ($unexpected.Count -gt 0) {
+        throw "$Description has unsupported field(s): $($unexpected -join ', ')"
+    }
+}
+
+function Get-BootstrapItemProvider($Item) {
+    $provider = [string](Get-BootstrapObjectProperty $Item 'provider')
+    if (-not [string]::IsNullOrWhiteSpace($provider)) { return $provider }
+    return [string](Get-BootstrapObjectProperty $Item 'mode')
+}
+
+function Get-BootstrapPackageItemKey($Item) {
+    $id = [string](Get-BootstrapObjectProperty $Item 'id')
+    if (-not [string]::IsNullOrWhiteSpace($id)) { return $id }
+    return ('builtin/{0}/{1}' -f (Get-BootstrapItemProvider $Item), [string](Get-BootstrapObjectProperty $Item 'name'))
+}
+
+function Assert-BootstrapUniquePackageItems($Items) {
+    $all = @($Items)
+    $emptyNames = @($all | Where-Object { [string]::IsNullOrWhiteSpace([string](Get-BootstrapObjectProperty $_ 'name')) })
+    if ($emptyNames.Count -gt 0) { throw 'Bootstrap package plan contains an item without a name' }
+    foreach ($field in @('name')) {
+        $duplicates = @($all | Group-Object -Property $field | Where-Object { $_.Count -gt 1 })
+        if ($duplicates.Count -gt 0) { throw "Bootstrap package plan contains duplicate $field values: $($duplicates.Name -join ', ')" }
+    }
+    $keys = @{}
+    foreach ($item in $all) {
+        $key = Get-BootstrapPackageItemKey $item
+        if ($keys.ContainsKey($key)) { throw "Bootstrap package plan contains duplicate package key: $key" }
+        $keys[$key] = $true
+    }
+    $wingetIds = @($all | Where-Object { -not [string]::IsNullOrWhiteSpace([string](Get-BootstrapObjectProperty $_ 'wingetId')) } | ForEach-Object { [string](Get-BootstrapObjectProperty $_ 'wingetId') })
+    $duplicateWingetIds = @($wingetIds | Group-Object | Where-Object { $_.Count -gt 1 })
+    if ($duplicateWingetIds.Count -gt 0) { throw "Bootstrap package plan contains duplicate WinGet IDs: $($duplicateWingetIds.Name -join ', ')" }
+}
+
+function Get-BootstrapPackagePlanRecord($Plan) {
+    $items = @($Plan.items | ForEach-Object {
+        [ordered]@{
+            key = Get-BootstrapPackageItemKey $_
+            name = [string](Get-BootstrapObjectProperty $_ 'name')
+            provider = Get-BootstrapItemProvider $_
+            executionContext = Get-BootstrapItemExecutionContext $_
+            source = [string](Get-BootstrapObjectProperty $_ 'source')
+            version = [string](Get-BootstrapObjectProperty $_ 'version')
+            wingetId = [string](Get-BootstrapObjectProperty $_ 'wingetId')
+        }
+    })
+    return [ordered]@{
+        format = 1
+        hash = [string]$Plan.hash
+        extensionManifests = @($Plan.extensionManifests)
+        itemCount = $items.Count
+        items = $items
+    }
+}
+
+function Get-BootstrapSha256FromBytes([byte[]]$Bytes) {
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { return (([BitConverter]::ToString($sha.ComputeHash($Bytes))) -replace '-', '').ToLowerInvariant() }
+    finally { $sha.Dispose() }
+}
+
+function Read-BootstrapExtensionManifestDocument([string]$Path) {
+    $full = Assert-BootstrapPlainExistingFile $Path 'Bootstrap extension manifest'
+    $length = (Get-Item -LiteralPath $full -Force -ErrorAction Stop).Length
+    if ($length -le 0) { throw "Bootstrap extension manifest is empty: $full" }
+    if ($length -gt 262144) { throw "Bootstrap extension manifest is too large: $full" }
+    $bytes = [IO.File]::ReadAllBytes($full)
+    if ($bytes.Length -eq 0) { throw "Bootstrap extension manifest is empty: $full" }
+    if ($bytes.Length -gt 262144) { throw "Bootstrap extension manifest is too large: $full" }
+    $offset = 0
+    if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) { $offset = 3 }
+    try {
+        $encoding = New-Object Text.UTF8Encoding($false, $true)
+        $text = $encoding.GetString($bytes, $offset, $bytes.Length - $offset)
+        Assert-BootstrapJsonHasNoDuplicateObjectFields $text "Bootstrap extension manifest: $full"
+        $manifest = $text | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+        throw "Bootstrap extension manifest is not valid UTF-8 JSON: $full ($($_.Exception.Message))"
+    }
+    return [pscustomobject]@{ path = $full; sha256 = Get-BootstrapSha256FromBytes $bytes; manifest = $manifest }
+}
+
+function Get-BootstrapExtensionManifestRecords($Items) {
+    $records = @{}
+    foreach ($item in @($Items)) {
+        $path = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $item 'extensionManifest') 'Bootstrap extension plan manifest path' 32767
+        $extensionId = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $item 'extensionId') 'Bootstrap extension plan extension ID' 64
+        $sha256 = ConvertTo-BootstrapSha256Hex ([string](Get-BootstrapObjectProperty $item 'extensionManifestSha256')) 'Bootstrap extension plan manifest SHA-256'
+        if ($records.ContainsKey($path)) {
+            if ([string]$records[$path].sha256 -cne $sha256 -or [string]$records[$path].id -cne $extensionId) {
+                throw "Bootstrap extension manifest changed while being parsed: $path"
+            }
+            continue
+        }
+        $records[$path] = [ordered]@{ id = $extensionId; path = $path; sha256 = $sha256 }
+    }
+    return @(Sort-BootstrapExtensionManifestRecords @($records.Values))
+}
+
+function Assert-BootstrapNormalizedExtensionItems($Items, $ExtensionManifests) {
+    $manifestHashes = @{}
+    $allItems = @($Items)
+    if ($allItems.Count -eq 0 -or $allItems.Count -gt 256) { throw 'Bootstrap extension plan has an invalid item count' }
+    foreach ($record in @($ExtensionManifests)) {
+        Assert-BootstrapJsonObject $record 'Bootstrap extension plan manifest record' | Out-Null
+        Assert-BootstrapAllowedObjectFields $record @('id', 'path', 'sha256') 'Bootstrap extension plan manifest record'
+        $id = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $record 'id') 'Bootstrap extension plan manifest ID' 64
+        $path = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $record 'path') 'Bootstrap extension plan manifest path' 32767
+        $sha256 = ConvertTo-BootstrapSha256Hex ([string](Get-BootstrapObjectProperty $record 'sha256')) 'Bootstrap extension plan manifest SHA-256'
+        if ($id -cnotmatch '^[a-z][a-z0-9-]{0,63}$') { throw 'Bootstrap extension plan has an invalid manifest ID' }
+        if ($manifestHashes.ContainsKey($path)) { throw "Bootstrap extension plan has duplicate manifest records: $path" }
+        $manifestHashes[$path] = [pscustomobject]@{ id = $id; sha256 = $sha256 }
+    }
+    if ($manifestHashes.Count -eq 0) { throw 'Bootstrap extension plan has no manifest provenance' }
+    foreach ($item in $allItems) {
+        Assert-BootstrapJsonObject $item 'Bootstrap extension plan item' | Out-Null
+        $id = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $item 'id') 'Bootstrap extension plan item ID' 129
+        $extensionId = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $item 'extensionId') 'Bootstrap extension plan extension ID' 64
+        $path = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $item 'extensionManifest') 'Bootstrap extension plan manifest path' 32767
+        $manifestSha256 = ConvertTo-BootstrapSha256Hex ([string](Get-BootstrapObjectProperty $item 'extensionManifestSha256')) 'Bootstrap extension plan manifest SHA-256'
+        $name = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $item 'name') 'Bootstrap extension plan item name' 160
+        $provider = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $item 'provider') 'Bootstrap extension plan item provider' 64
+        $itemExecutionContext = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $item 'executionContext') 'Bootstrap extension plan execution context' 16
+        $architecture = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $item 'architecture') 'Bootstrap extension plan architecture' 16
+        if ($id -cnotmatch '^[a-z][a-z0-9-]{0,63}/[a-z][a-z0-9-]{0,63}$' -or $extensionId -cnotmatch '^[a-z][a-z0-9-]{0,63}$' -or
+            -not $manifestHashes.ContainsKey($path) -or $manifestSha256 -cne [string]$manifestHashes[$path].sha256 -or
+            $extensionId -cne [string]$manifestHashes[$path].id) {
+            throw "Bootstrap extension plan item has invalid identity/provenance: $name"
+        }
+        if ([string](Get-BootstrapObjectProperty $item 'mode') -cne $provider -or $itemExecutionContext -cnotin @('elevated', 'user') -or
+            $architecture -cnotin @('x64', 'all')) {
+            throw "Bootstrap extension plan item has invalid provider metadata: $name"
+        }
+        switch ($provider) {
+            'winget' {
+                Assert-BootstrapAllowedObjectFields $item @('id', 'extensionId', 'extensionManifest', 'extensionManifestSha256', 'name', 'provider', 'mode', 'version', 'architecture', 'executionContext', 'source', 'checksum', 'silentInstallArgs', 'uninstallCommand', 'verification', 'cleanupMode', 'wingetId', 'wingetSource', 'installTimeoutSeconds') 'Bootstrap extension WinGet plan item'
+                $wingetId = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $item 'wingetId') "Bootstrap extension WinGet ID for $name" 128
+                $wingetSource = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $item 'wingetSource') "Bootstrap extension WinGet source for $name" 16
+                if ($wingetId -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$' -or $wingetSource -notin @('winget', 'msstore') -or
+                    [string](Get-BootstrapObjectProperty $item 'version') -cne 'winget-latest-stable' -or
+                    [string](Get-BootstrapObjectProperty $item 'source') -cne "$wingetSource`:$wingetId" -or
+                    [string](Get-BootstrapObjectProperty $item 'checksum') -cne 'winget-source-signed' -or
+                    [string](Get-BootstrapObjectProperty $item 'cleanupMode') -cne 'winget-uninstall-if-new') {
+                    throw "Bootstrap extension WinGet plan item has an invalid source contract: $name"
+                }
+                $scope = if ($itemExecutionContext -eq 'user') { 'user' } else { 'machine' }
+                $expectedInstall = @('--silent', '--accept-source-agreements', '--accept-package-agreements', '--disable-interactivity', '--scope', $scope)
+                if (@(Get-BootstrapObjectProperty $item 'silentInstallArgs').Count -ne $expectedInstall.Count -or
+                    (@(Get-BootstrapObjectProperty $item 'silentInstallArgs') -join "`n") -cne ($expectedInstall -join "`n")) {
+                    throw "Bootstrap extension WinGet plan item has unsafe install arguments: $name"
+                }
+                $timeout = ConvertTo-BootstrapBoundedInteger (Get-BootstrapObjectProperty $item 'installTimeoutSeconds') "Bootstrap extension WinGet timeout for $name" 1 900
+                $uninstall = Assert-BootstrapJsonObject (Get-BootstrapObjectProperty $item 'uninstallCommand') "Bootstrap extension WinGet cleanup contract for $name"
+                $verification = Assert-BootstrapJsonObject (Get-BootstrapObjectProperty $item 'verification') "Bootstrap extension WinGet verification contract for $name"
+                Assert-BootstrapAllowedObjectFields $uninstall @('type', 'args') "Bootstrap extension WinGet cleanup contract for $name"
+                Assert-BootstrapAllowedObjectFields $verification @('type', 'command', 'expected') "Bootstrap extension WinGet verification contract for $name"
+                $uninstallArgs = @(Get-BootstrapJsonObjectArray $uninstall 'args' "Bootstrap extension WinGet cleanup arguments for $name")
+                if (@($uninstallArgs | Where-Object { $_ -isnot [string] }).Count -gt 0 -or
+                    [string](Get-BootstrapObjectProperty $uninstall 'type') -cne 'winget' -or
+                    ($uninstallArgs -join "`n") -cne (@('uninstall', '--id', '{wingetId}', '--exact', '--silent', '--accept-source-agreements', '--disable-interactivity') -join "`n") -or
+                    [string](Get-BootstrapObjectProperty $verification 'type') -cne 'winget-list' -or
+                    [string](Get-BootstrapObjectProperty $verification 'command') -cne $wingetId -or
+                    [string](Get-BootstrapObjectProperty $verification 'expected') -cne 'installed in winget list') {
+                    throw "Bootstrap extension WinGet plan item has an invalid cleanup/verification contract: $name"
+                }
+            }
+            'manual' {
+                Assert-BootstrapAllowedObjectFields $item @('id', 'extensionId', 'extensionManifest', 'extensionManifestSha256', 'name', 'provider', 'mode', 'version', 'architecture', 'executionContext', 'source', 'checksum', 'silentInstallArgs', 'uninstallCommand', 'verification', 'cleanupMode', 'reason') 'Bootstrap extension manual plan item'
+                $reason = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $item 'reason') "Bootstrap extension manual reason for $name" 1024
+                $uninstall = Assert-BootstrapJsonObject (Get-BootstrapObjectProperty $item 'uninstallCommand') "Bootstrap extension manual cleanup contract for $name"
+                $verification = Assert-BootstrapJsonObject (Get-BootstrapObjectProperty $item 'verification') "Bootstrap extension manual verification contract for $name"
+                Assert-BootstrapAllowedObjectFields $uninstall @('type', 'args') "Bootstrap extension manual cleanup contract for $name"
+                Assert-BootstrapAllowedObjectFields $verification @('type') "Bootstrap extension manual verification contract for $name"
+                $installArgs = @(Get-BootstrapJsonObjectArray $item 'silentInstallArgs' "Bootstrap extension manual install arguments for $name")
+                $uninstallArgs = @(Get-BootstrapJsonObjectArray $uninstall 'args' "Bootstrap extension manual cleanup arguments for $name")
+                if ($itemExecutionContext -ne 'elevated' -or [string](Get-BootstrapObjectProperty $item 'version') -cne 'manual-review' -or
+                    [string](Get-BootstrapObjectProperty $item 'source') -cnotmatch '^manual:[a-z0-9][a-z0-9._/-]{0,191}$' -or
+                    [string](Get-BootstrapObjectProperty $item 'checksum') -cne 'manual-review' -or
+                    [string](Get-BootstrapObjectProperty $item 'cleanupMode') -cne 'manual' -or
+                    $installArgs.Count -ne 0 -or $uninstallArgs.Count -ne 0 -or
+                    [string](Get-BootstrapObjectProperty $uninstall 'type') -cne 'manual' -or
+                    [string](Get-BootstrapObjectProperty $verification 'type') -cne 'manual') {
+                    throw "Bootstrap extension manual plan item has an invalid contract: $name"
+                }
+            }
+            default { throw "Bootstrap extension plan uses an unavailable provider: $provider" }
+        }
+    }
+    Assert-BootstrapExtensionProviderAvailability $Items
+    Assert-BootstrapUniquePackageItems $Items
+}
+
+function Get-BootstrapExtensionManifestItems([string[]]$ExtensionManifest, [string]$BootstrapRoot) {
+    $paths = @(Get-BootstrapExtensionManifestPaths $ExtensionManifest)
+    if ($paths.Count -eq 0) { return @() }
+    $providers = Get-BootstrapProviderRegistry $BootstrapRoot
+    $items = @()
+    $extensionIds = @{}
+    $extensionItemIds = @{}
+    foreach ($path in $paths) {
+        $document = Read-BootstrapExtensionManifestDocument $path
+        $manifest = $document.manifest
+        Assert-BootstrapJsonObject $manifest "Bootstrap extension manifest: $path" | Out-Null
+        Assert-BootstrapAllowedObjectFields $manifest @('format', 'id', 'items') 'Bootstrap extension manifest'
+        if ((ConvertTo-BootstrapBoundedInteger (Get-BootstrapObjectProperty $manifest 'format') "Bootstrap extension manifest format: $path" 2 2) -ne 2) {
+            throw "Bootstrap extension manifest format must be 2: $path"
+        }
+        $extensionId = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $manifest 'id') "Bootstrap extension manifest ID: $path" 64
+        if ($extensionId -cnotmatch '^[a-z][a-z0-9-]{0,63}$') { throw "Bootstrap extension manifest has an invalid id: $path" }
+        if ($extensionIds.ContainsKey($extensionId)) { throw "Bootstrap extension manifests reuse id '$extensionId': $path" }
+        $extensionIds[$extensionId] = $true
+        $declaredItems = @(Get-BootstrapJsonObjectArray $manifest 'items' "Bootstrap extension manifest items: $path")
+        if ($declaredItems.Count -eq 0 -or $declaredItems.Count -gt 64) { throw "Bootstrap extension manifest has an invalid item count: $path" }
+        foreach ($item in $declaredItems) {
+            if ($items.Count -ge 256) { throw 'Bootstrap extension package plan exceeds 256 items' }
+            Assert-BootstrapJsonObject $item 'Bootstrap extension manifest item' | Out-Null
+            $providerId = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $item 'provider') 'Bootstrap extension item provider' 64
+            if (-not $providers.ContainsKey($providerId) -or $providerId -cne [string]$providers[$providerId].id -or
+                -not [bool]$providers[$providerId].extensionAllowed) {
+                throw "Bootstrap extension item uses an unavailable provider '$providerId'"
+            }
+            switch ($providerId) {
+                'winget' { Assert-BootstrapAllowedObjectFields $item @('id', 'name', 'provider', 'version', 'architecture', 'executionContext', 'source', 'wingetId', 'wingetSource', 'install') 'Bootstrap extension WinGet item' }
+                'manual' { Assert-BootstrapAllowedObjectFields $item @('id', 'name', 'provider', 'version', 'architecture', 'executionContext', 'source', 'checksum', 'reason') 'Bootstrap extension manual item' }
+                default { throw "Bootstrap extension item uses an unavailable provider '$providerId'" }
+            }
+            $itemId = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $item 'id') 'Bootstrap extension item ID' 64
+            if ($extensionItemIds.ContainsKey($itemId)) { throw "Bootstrap extension manifests reuse item id '$itemId': $path" }
+            $extensionItemIds[$itemId] = $true
+            $name = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $item 'name') 'Bootstrap extension item name' 160
+            if ($itemId -cnotmatch '^[a-z][a-z0-9-]{0,63}$') { throw "Bootstrap extension item has an invalid id: $path" }
+            $itemExecutionContext = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $item 'executionContext') "Bootstrap extension execution context for $name" 16
+            if ($itemExecutionContext -cnotin @($providers[$providerId].executionContexts)) {
+                throw "Bootstrap extension item has an unsupported execution context for provider '$providerId': $name"
+            }
+            $version = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $item 'version') "Bootstrap extension version for $name" 64
+            $source = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $item 'source') "Bootstrap extension source for $name" 256
+            $architecture = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $item 'architecture') "Bootstrap extension architecture for $name" 16
+            if ($architecture -cnotin @('x64', 'all')) { throw "Bootstrap extension item has an unsupported architecture: $name" }
+            $normalized = [ordered]@{
+                id = "$extensionId/$itemId"
+                extensionId = $extensionId
+                extensionManifest = $document.path
+                extensionManifestSha256 = $document.sha256
+                name = $name
+                provider = $providerId
+                mode = $providerId
+                version = $version
+                architecture = $architecture
+                executionContext = $itemExecutionContext
+                source = $source
+                checksum = [string](Get-BootstrapObjectProperty $item 'checksum')
+                silentInstallArgs = @()
+                uninstallCommand = [ordered]@{ type = 'manual'; args = @() }
+                verification = [ordered]@{ type = 'manual' }
+                cleanupMode = 'manual'
+            }
+            if ($normalized.architecture -cnotin @('x64', 'all')) { throw "Bootstrap extension item has an unsupported architecture: $name" }
+            switch ($providerId) {
+                'winget' {
+                    if ($version -cne 'winget-latest-stable') { throw "Bootstrap extension WinGet item must use version=winget-latest-stable: $name" }
+                    $wingetId = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $item 'wingetId') "Bootstrap extension WinGet ID for $name" 128
+                    if ($wingetId -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$') { throw "Bootstrap extension WinGet item has an invalid package ID: $name" }
+                    $wingetSource = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $item 'wingetSource') "Bootstrap extension WinGet source for $name" 16
+                    if ($wingetSource -cnotin @('winget', 'msstore')) { throw "Bootstrap extension WinGet item has an invalid source: $name" }
+                    if ($source -cne "$wingetSource`:$wingetId") { throw "Bootstrap extension WinGet source must match provider and package ID: $name" }
+                    $install = Assert-BootstrapJsonObject (Get-BootstrapObjectProperty $item 'install') "Bootstrap extension WinGet install contract for $name"
+                    Assert-BootstrapAllowedObjectFields $install @('scope', 'silent', 'timeoutSeconds') "Bootstrap extension WinGet install contract for $name"
+                    $scope = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $install 'scope') "Bootstrap extension WinGet install scope for $name" 16
+                    if ($scope -cnotin @('machine', 'user')) { throw "Bootstrap extension WinGet item has an invalid install scope: $name" }
+                    if ($itemExecutionContext -eq 'user' -and $scope -ne 'user') { throw "Bootstrap extension user WinGet item requires scope=user: $name" }
+                    if ($itemExecutionContext -eq 'elevated' -and $scope -ne 'machine') { throw "Bootstrap extension elevated WinGet item requires scope=machine: $name" }
+                    if (-not (Assert-BootstrapJsonBoolean (Get-BootstrapObjectProperty $install 'silent') "Bootstrap extension WinGet silent contract for $name")) { throw "Bootstrap extension WinGet item must require a silent install: $name" }
+                    $timeout = ConvertTo-BootstrapBoundedInteger (Get-BootstrapObjectProperty $install 'timeoutSeconds') "Bootstrap extension WinGet timeout for $name" 1 900
+                    $normalized.wingetId = $wingetId
+                    $normalized.wingetSource = $wingetSource
+                    $normalized.silentInstallArgs = @('--silent', '--accept-source-agreements', '--accept-package-agreements', '--disable-interactivity', '--scope', $scope)
+                    $normalized.uninstallCommand = [ordered]@{ type = 'winget'; args = @('uninstall', '--id', '{wingetId}', '--exact', '--silent', '--accept-source-agreements', '--disable-interactivity') }
+                    $normalized.checksum = 'winget-source-signed'
+                    $normalized.verification = [ordered]@{ type = 'winget-list'; command = $wingetId; expected = 'installed in winget list' }
+                    $normalized.cleanupMode = 'winget-uninstall-if-new'
+                    $normalized.installTimeoutSeconds = [int]$timeout
+                }
+                'manual' {
+                    if ($version -cne 'manual-review') { throw "Bootstrap extension manual item must use version=manual-review: $name" }
+                    $normalized['reason'] = Assert-BootstrapRequiredString (Get-BootstrapObjectProperty $item 'reason') "Bootstrap extension manual reason for $name" 1024
+                    if ($itemExecutionContext -ne 'elevated') { throw "Bootstrap extension manual item must use elevated context: $name" }
+                    if ($source -cnotmatch '^manual:[a-z0-9][a-z0-9._/-]{0,191}$') { throw "Bootstrap extension manual item must use a manual source: $name" }
+                    if ($normalized.checksum -ne 'manual-review') { throw "Bootstrap extension manual item must use checksum=manual-review: $name" }
+                }
+            }
+            $items += [pscustomobject]$normalized
+        }
+    }
+    Assert-BootstrapNormalizedExtensionItems $items (Get-BootstrapExtensionManifestRecords $items)
+    return $items
+}
+
+function Test-BootstrapExtensionPackageItem($Item) {
+    return -not [string]::IsNullOrWhiteSpace([string](Get-BootstrapObjectProperty $Item 'extensionManifest'))
+}
+
+function Get-BootstrapCanonicalValueSha256($Value) {
+    $json = ConvertTo-BootstrapCanonicalJsonText $Value
+    return Get-BootstrapSha256FromBytes ([Text.Encoding]::UTF8.GetBytes($json))
+}
+
+function Get-BootstrapPackagePlanApprovalItem($Item) {
+    $record = [ordered]@{
+        key = Get-BootstrapPackageItemKey $Item
+        name = [string](Get-BootstrapObjectProperty $Item 'name')
+        provider = Get-BootstrapItemProvider $Item
+        executionContext = Get-BootstrapItemExecutionContext $Item
+        source = [string](Get-BootstrapObjectProperty $Item 'source')
+        version = [string](Get-BootstrapObjectProperty $Item 'version')
+        architecture = [string](Get-BootstrapObjectProperty $Item 'architecture')
+    }
+    if (Test-BootstrapExtensionPackageItem $Item) {
+        $record.extensionId = [string](Get-BootstrapObjectProperty $Item 'extensionId')
+        $record.extensionManifestSha256 = ConvertTo-BootstrapSha256Hex ([string](Get-BootstrapObjectProperty $Item 'extensionManifestSha256')) 'Bootstrap extension manifest SHA-256'
+    }
+    if ([string](Get-BootstrapItemProvider $Item) -eq 'winget') {
+        $record.wingetId = [string](Get-BootstrapObjectProperty $Item 'wingetId')
+        $record.wingetSource = [string](Get-BootstrapObjectProperty $Item 'wingetSource')
+        $record.installTimeoutSeconds = Get-BootstrapObjectProperty $Item 'installTimeoutSeconds'
+        $record.cleanupMode = [string](Get-BootstrapObjectProperty $Item 'cleanupMode')
+    }
+    if ([string](Get-BootstrapItemProvider $Item) -eq 'manual') {
+        $record.reason = [string](Get-BootstrapObjectProperty $Item 'reason')
+    }
+    return [pscustomobject]$record
+}
+
+function Get-BootstrapPackagePlanApprovalManifestRecord($Record) {
+    return [pscustomobject][ordered]@{
+        id = [string](Get-BootstrapObjectProperty $Record 'id')
+        path = [string](Get-BootstrapObjectProperty $Record 'path')
+        sha256 = ConvertTo-BootstrapSha256Hex ([string](Get-BootstrapObjectProperty $Record 'sha256')) 'Bootstrap extension manifest SHA-256'
+    }
+}
+
+function Get-BootstrapPackagePlan($Items, $ExtensionManifests) {
+    $allItems = @($Items | Where-Object { $null -ne $_ })
+    $records = @($ExtensionManifests | Where-Object { $null -ne $_ })
+    $extensionItems = @($allItems | Where-Object { Test-BootstrapExtensionPackageItem $_ })
+    if ($records.Count -gt 0) {
+        if ($extensionItems.Count -eq 0) { throw 'Bootstrap package plan has extension provenance but no extension items' }
+        Assert-BootstrapNormalizedExtensionItems $extensionItems $records
+    } elseif ($extensionItems.Count -gt 0) {
+        throw 'Bootstrap package plan has extension items without manifest provenance'
+    }
+    Assert-BootstrapUniquePackageItems $allItems
+    $approvalRecords = @(Sort-BootstrapExtensionManifestRecords @($records | ForEach-Object { Get-BootstrapPackagePlanApprovalManifestRecord $_ }))
+    $approvalItems = @($allItems | ForEach-Object { Get-BootstrapPackagePlanApprovalItem $_ })
+    $payload = [ordered]@{ format = 1; extensionManifests = $approvalRecords; items = $approvalItems }
+    $hash = Get-BootstrapCanonicalValueSha256 $payload
+    return [pscustomobject]@{ format = 1; hash = $hash; extensionManifests = $records; items = $allItems }
+}
+
+function Assert-BootstrapPackagePlanSnapshotShape($Snapshot, [string]$Path) {
+    Assert-BootstrapJsonObject $Snapshot 'Bootstrap package-plan snapshot' | Out-Null
+    Assert-BootstrapAllowedObjectFields $Snapshot @('format', 'kind', 'runId', 'ownerSid', 'createdAt', 'profile', 'approvedPlan', 'plan') 'Bootstrap package-plan snapshot'
+    if ((ConvertTo-BootstrapBoundedInteger (Get-BootstrapObjectProperty $Snapshot 'format') 'Bootstrap package-plan snapshot format' 1 1) -ne 1 -or
+        [string](Get-BootstrapObjectProperty $Snapshot 'kind') -cne 'windows-bootstrap-package-plan') {
+        throw "Bootstrap package-plan snapshot format is invalid: $Path"
+    }
+    $plan = Get-BootstrapObjectProperty $Snapshot 'plan'
+    Assert-BootstrapJsonObject $plan 'Bootstrap package-plan snapshot plan' | Out-Null
+    Assert-BootstrapAllowedObjectFields $plan @('format', 'hash', 'extensionManifests', 'items') 'Bootstrap package-plan snapshot plan'
+    if ((ConvertTo-BootstrapBoundedInteger (Get-BootstrapObjectProperty $plan 'format') 'Bootstrap package-plan snapshot plan format' 1 1) -ne 1) {
+        throw "Bootstrap package-plan snapshot plan is invalid: $Path"
+    }
+    Get-BootstrapJsonObjectArray $plan 'extensionManifests' 'Bootstrap package-plan snapshot extension manifests' | Out-Null
+    Get-BootstrapJsonObjectArray $plan 'items' 'Bootstrap package-plan snapshot items' | Out-Null
+    return $plan
+}
+
+function Write-BootstrapPackagePlanSnapshot([string]$RunId, [string]$Profile, $Plan, [string]$ApprovedPlan) {
+    if (-not (Test-BootstrapRunId $RunId)) { throw "Invalid bootstrap package-plan run ID: $RunId" }
+    if ($Profile -cne 'Extension') { throw 'Bootstrap package-plan snapshots are only valid for Profile Extension' }
+    $normalizedApproval = ConvertTo-BootstrapSha256Hex $ApprovedPlan 'Bootstrap package-plan approval hash'
+    $reconstructed = Get-BootstrapPackagePlan @($Plan.items) @($Plan.extensionManifests)
+    if (@($reconstructed.items | Where-Object { -not (Test-BootstrapExtensionPackageItem $_) }).Count -gt 0 -or
+        -not (Test-BootstrapApprovedPackagePlan $normalizedApproval $reconstructed)) {
+        throw 'Bootstrap package plan approval does not match the planned extension hash'
+    }
+    $ownerSid = Get-BootstrapCurrentUserSid
+    $root = Ensure-BootstrapPlainDirectory (Get-BootstrapUserPhaseStateRoot $RunId)
+    Protect-BootstrapUserPhaseRoot $root $ownerSid | Out-Null
+    if (-not (Test-BootstrapUserPhasePathSecurity $root $ownerSid -RequireProtectedDacl)) {
+        throw "Bootstrap package-plan root owner or DACL does not match the required policy: $root"
+    }
+    $path = Assert-BootstrapPlainPath (Join-Path $root 'package-plan.json')
+    $snapshot = [ordered]@{
+        format = 1
+        kind = 'windows-bootstrap-package-plan'
+        runId = $RunId.ToLowerInvariant()
+        ownerSid = $ownerSid
+        createdAt = [DateTime]::UtcNow.ToString('o')
+        profile = $Profile
+        approvedPlan = $normalizedApproval
+        plan = [ordered]@{
+            format = [int]$reconstructed.format
+            hash = [string]$reconstructed.hash
+            extensionManifests = @($reconstructed.extensionManifests)
+            items = @($reconstructed.items)
+        }
+    }
+    Write-BootstrapJson $path $snapshot
+    Protect-BootstrapUserPhaseHandoff $path $ownerSid | Out-Null
+    if (-not (Test-BootstrapUserPhasePathSecurity $path $ownerSid -RequireProtectedDacl)) {
+        throw "Bootstrap package-plan snapshot owner or DACL does not match the required policy: $path"
+    }
+    $verified = Read-BootstrapPackagePlanSnapshot $path $RunId $Profile $normalizedApproval @()
+    if ([string]$verified.hash -cne [string]$reconstructed.hash) { throw "Bootstrap package-plan snapshot verification failed: $path" }
+    return $path
+}
+
+function Read-BootstrapPackagePlanSnapshot([string]$Path, [string]$RunId, [string]$ExpectedProfile, [string]$ApprovedPlan, $ExpectedBuiltInItems) {
+    if (-not (Test-BootstrapRunId $RunId)) { throw "Invalid bootstrap package-plan run ID: $RunId" }
+    if ($ExpectedProfile -cne 'Extension') { throw 'Bootstrap package-plan snapshots are only valid for Profile Extension' }
+    if ([string]::IsNullOrWhiteSpace($Path)) { throw 'Bootstrap package-plan snapshot path is missing' }
+    $normalizedApproval = ConvertTo-BootstrapSha256Hex $ApprovedPlan 'Bootstrap package-plan approval hash'
+    $ownerSid = Get-BootstrapCurrentUserSid
+    $expectedRoot = Get-BootstrapUserPhaseStateRoot $RunId
+    $expectedPath = Join-Path $expectedRoot 'package-plan.json'
+    $fullPath = Assert-BootstrapPlainExistingFile $Path 'Bootstrap package-plan snapshot'
+    if ([IO.Path]::GetFullPath($fullPath) -ine [IO.Path]::GetFullPath($expectedPath)) {
+        throw "Bootstrap package-plan snapshot path is not current-run user-phase storage: $fullPath"
+    }
+    if (-not (Test-BootstrapUserPhasePathSecurity $expectedRoot $ownerSid -RequireProtectedDacl) -or
+        -not (Test-BootstrapUserPhasePathSecurity $fullPath $ownerSid -RequireProtectedDacl)) {
+        throw "Bootstrap package-plan snapshot root, owner, or DACL does not match the required policy: $fullPath"
+    }
+    $snapshotLength = (Get-Item -LiteralPath $fullPath -Force -ErrorAction Stop).Length
+    if ($snapshotLength -le 0 -or $snapshotLength -gt 16777216) {
+        throw "Bootstrap package-plan snapshot has an invalid size: $fullPath"
+    }
+    $snapshot = Read-BootstrapJson $fullPath
+    $storedPlan = Assert-BootstrapPackagePlanSnapshotShape $snapshot $fullPath
+    $snapshotRunId = [string](Get-BootstrapObjectProperty $snapshot 'runId')
+    $snapshotOwnerSid = [string](Get-BootstrapObjectProperty $snapshot 'ownerSid')
+    $snapshotProfile = [string](Get-BootstrapObjectProperty $snapshot 'profile')
+    if ($snapshotRunId -cne $RunId.ToLowerInvariant() -or $snapshotOwnerSid -cne $ownerSid -or $snapshotProfile -cne $ExpectedProfile) {
+        throw "Bootstrap package-plan snapshot provenance does not match current run: $fullPath"
+    }
+    $snapshotApproval = ConvertTo-BootstrapSha256Hex ([string](Get-BootstrapObjectProperty $snapshot 'approvedPlan')) 'Bootstrap package-plan snapshot approval hash'
+    if ($snapshotApproval -cne $normalizedApproval) { throw "Bootstrap package-plan snapshot approval does not match invocation: $fullPath" }
+    try {
+        $createdAt = ConvertTo-BootstrapUtcDateTime (Get-BootstrapObjectProperty $snapshot 'createdAt')
+        $age = [DateTime]::UtcNow - $createdAt
+        if ($age.TotalHours -gt 24 -or $age.TotalMinutes -lt -5) { throw 'snapshot is stale or has a future timestamp' }
+    } catch { throw "Bootstrap package-plan snapshot timestamp is invalid: $($_.Exception.Message)" }
+    $storedHash = ConvertTo-BootstrapSha256Hex ([string](Get-BootstrapObjectProperty $storedPlan 'hash')) 'Bootstrap package-plan snapshot plan hash'
+    $storedItems = @(Get-BootstrapJsonObjectArray $storedPlan 'items' 'Bootstrap package-plan snapshot items')
+    $extensionItems = @($storedItems | Where-Object { Test-BootstrapExtensionPackageItem $_ })
+    $storedBuiltIns = @($storedItems | Where-Object { -not (Test-BootstrapExtensionPackageItem $_) })
+    if ($extensionItems.Count -eq 0) { throw "Bootstrap package-plan snapshot has no extension items: $fullPath" }
+    if ((Get-BootstrapCanonicalValueSha256 $storedBuiltIns) -cne (Get-BootstrapCanonicalValueSha256 @($ExpectedBuiltInItems))) {
+        throw "Bootstrap package-plan snapshot built-in items do not match current selected manifests: $fullPath"
+    }
+    $manifestRecords = @(Get-BootstrapJsonObjectArray $storedPlan 'extensionManifests' 'Bootstrap package-plan snapshot extension manifests')
+    $reconstructed = Get-BootstrapPackagePlan (@($ExpectedBuiltInItems) + $extensionItems) $manifestRecords
+    if ($storedHash -cne [string]$reconstructed.hash -or -not (Test-BootstrapApprovedPackagePlan $normalizedApproval $reconstructed)) {
+        throw "Bootstrap package-plan snapshot hash does not match its approved plan: $fullPath"
+    }
+    return $reconstructed
+}
+
+function Test-BootstrapApprovedPackagePlan([string]$ApprovedPlan, $Plan) {
+    try {
+        if ($null -eq $Plan) { return $false }
+        $approved = ConvertTo-BootstrapSha256Hex $ApprovedPlan 'Bootstrap package-plan approval hash'
+        $planned = ConvertTo-BootstrapSha256Hex ([string](Get-BootstrapObjectProperty $Plan 'hash')) 'Bootstrap package-plan hash'
+        return $approved -ceq $planned
+    } catch {
+        return $false
+    }
+}
+
+function Get-BootstrapExtensionResumePlanReference($State, [string]$SnapshotPath = '', [string]$ApprovedPlan = '') {
+    if ($null -eq $State) { throw 'Bootstrap extension Resume has no persisted state' }
+    $storedPlan = Get-BootstrapObjectProperty $State 'packagePlan'
+    $storedPath = [string](Get-BootstrapObjectProperty $storedPlan 'snapshotPath')
+    if ([string]::IsNullOrWhiteSpace($storedPath)) {
+        throw 'Bootstrap extension Resume state has no protected package-plan snapshot path'
+    }
+    $storedApproval = ConvertTo-BootstrapSha256Hex ([string](Get-BootstrapObjectProperty $storedPlan 'hash')) 'Bootstrap extension Resume package-plan hash'
+    try { $storedFullPath = [IO.Path]::GetFullPath($storedPath) } catch {
+        throw "Bootstrap extension Resume state has an invalid package-plan snapshot path: $storedPath"
+    }
+    if (-not [string]::IsNullOrWhiteSpace($SnapshotPath)) {
+        try { $requestedFullPath = [IO.Path]::GetFullPath($SnapshotPath) } catch {
+            throw "Bootstrap extension Resume received an invalid package-plan snapshot path: $SnapshotPath"
+        }
+        if ($requestedFullPath -ine $storedFullPath) {
+            throw 'Bootstrap extension Resume snapshot path does not match persisted state'
+        }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ApprovedPlan) -and
+        (ConvertTo-BootstrapSha256Hex $ApprovedPlan 'Bootstrap extension Resume approval hash') -cne $storedApproval) {
+        throw 'Bootstrap extension Resume approval hash does not match persisted state'
+    }
+    return [pscustomobject]@{ snapshotPath = $storedFullPath; approvePlan = $storedApproval }
+}
+
 function Get-BootstrapManifestItems([string]$ManifestDirectory, [string[]]$Files) {
     $items = @()
     $required = @('version', 'architecture', 'silentInstallArgs', 'uninstallCommand', 'source', 'checksum', 'verification')
@@ -1261,7 +2214,9 @@ function Invoke-BootstrapWingetInstall($Context, $Item, [string]$Winget) {
     }
     $requestedLocation = Get-BootstrapItemInstallLocation $Item $Context
     if (-not [string]::IsNullOrWhiteSpace($requestedLocation)) { $args += @('--location', $requestedLocation) }
-    $result = Invoke-BootstrapExternal $Winget $args -TimeoutSeconds 900 -LogPath $Context.LogPath
+    $installTimeout = Get-BootstrapObjectProperty $Item 'installTimeoutSeconds'
+    if ($null -eq $installTimeout -or [int]$installTimeout -lt 1 -or [int]$installTimeout -gt 900) { $installTimeout = 900 }
+    $result = Invoke-BootstrapExternal $Winget $args -TimeoutSeconds ([int]$installTimeout) -LogPath $Context.LogPath
     Write-BootstrapLog $Context ("winget $($Item.wingetId): $($result.Output)")
     if ($result.ExitCode -eq 0 -and (Test-BootstrapWingetInstalled $Winget ([string]$Item.wingetId))) {
         $Context.State.installedPackages = @($Context.State.installedPackages) + [pscustomobject]@{ id = $Item.wingetId; name = $Item.name; before = $false; at = [DateTime]::UtcNow.ToString('o') }
@@ -1397,9 +2352,15 @@ function Get-BootstrapResumeArguments($Context, [string]$ScriptPath) {
     $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"{0}"' -f $ScriptPath), '-Resume', '-StateRoot', ('"{0}"' -f $Context.StateRoot), '-Profile', [string]$Context.State.profile)
     $options = $Context.State.executionOptions
     if ($null -ne $options) {
-        if ([bool]$options.skipRime) { $arguments += '-SkipRime' }
-        if ([bool]$options.noOptional) { $arguments += '-NoOptional' }
-        if ([bool]$options.noNetworkCheck) { $arguments += '-NoNetworkCheck' }
+        if ([bool](Get-BootstrapObjectProperty $options 'skipRime')) { $arguments += '-SkipRime' }
+        if ([bool](Get-BootstrapObjectProperty $options 'noOptional')) { $arguments += '-NoOptional' }
+        if ([bool](Get-BootstrapObjectProperty $options 'noNetworkCheck')) { $arguments += '-NoNetworkCheck' }
+    }
+    if ([string]$Context.State.profile -eq 'Extension') {
+        # Resume only inherits the state-recorded protected snapshot/hash pair;
+        # executionOptions are mutable run options, not package provenance.
+        $reference = Get-BootstrapExtensionResumePlanReference $Context.State
+        $arguments += @('-BootstrapPackagePlanPath', ('"{0}"' -f $reference.snapshotPath), '-ApprovePlan', ('"{0}"' -f $reference.approvePlan))
     }
     return ($arguments -join ' ')
 }
@@ -2103,8 +3064,26 @@ function Configure-BootstrapMintInputMethod($Context) {
     return [pscustomobject]@{ status = 'completed'; message = 'Mint/Weasel set as default Chinese input method; English entry preserved'; details = @{ inputTip = $rimeTip; before = $before; after = $after } }
 }
 
-function Get-BootstrapVerification($Context) {
+function Get-BootstrapVerification($Context, $Items = @()) {
     if ($Context.DryRun) { return @() }
+    $selectedItems = @($Items | Where-Object { $null -ne $_ })
+    if ([string]$Context.State.profile -eq 'Extension') {
+        $checks = @()
+        foreach ($item in $selectedItems) {
+            if (-not (Test-BootstrapExtensionPackageItem $item)) { continue }
+            $result = Get-BootstrapLatestResult $Context ([string]$item.name)
+            if ($null -eq $result) { continue }
+            if ([string]$item.mode -eq 'winget' -and [string]$result.status -eq 'completed') {
+                $ok = Test-BootstrapComponentStillComplete $Context $item
+                $checks += [pscustomobject]@{
+                    name = "component:$($item.name)"
+                    ok = [bool]$ok
+                    detail = if ($ok) { 'live WinGet completion check passed' } else { 'live WinGet completion check failed' }
+                }
+            }
+        }
+        return $checks
+    }
     $checks = @()
     foreach ($entry in @(
         @{ Name = 'git'; Command = 'git.exe' },

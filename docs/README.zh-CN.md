@@ -14,7 +14,8 @@ dotfiles 引导仓库的技术文档。
 | [故障排查](troubleshooting.zh-CN.md) | 常见失败、报错信息与修复 |
 | [密钥](secrets.zh-CN.md) | `.env` 约定、渲染器行为、安全规则 |
 | [Windows bootstrap](../windows-bootstrap/README.md) | 无人值守 Windows 11 入口、生命周期状态机、恢复、manifest |
-| [Windows bootstrap 软件清单](windows-bootstrap-packages.zh-CN.md) | `windows-bootstrap/packages/*.json` 逐项参考：WinGet ID、静默参数、验证方式、manual 原因 |
+| [Windows bootstrap 软件清单](windows-bootstrap-packages.zh-CN.md) | 内建 `windows-bootstrap/packages/*.json` 逐项参考：WinGet ID、静默参数、验证方式、manual 原因 |
+| [Windows bootstrap 扩展](windows-bootstrap-extensions.zh-CN.md) | 受限 `format: 2` 外部软件 manifest：provider 边界、schema、计划批准、受保护 snapshot 与模板 |
 | [Windows RIME](../windows/README.zh-CN.md) | 独立 Windows 11/PowerShell 7 x64 RIME profile、恢复/report 语义、原生验收边界 |
 | [Windows 验收证据](handoff-windows-rime-native-acceptance-evidence.md) | bootstrap 与 RIME 在 disposable guest 的 PASS/BLOCKED/UNVERIFIED 记录 |
 
@@ -22,7 +23,8 @@ dotfiles 引导仓库的技术文档。
 
 - macOS 安装器：`./install.sh`（见 [README](../README.zh-CN.md)）
 - Windows bootstrap：Windows 11 x64 运行 `pwsh.exe -NoProfile -File .\windows-bootstrap\install.ps1`（Windows PowerShell 5.1 或 PowerShell 7）；`-DryRun` 不产生任何变更。统一入口 `bootstrap.sh` 在 Windows Git Bash/MSYS2/Cygwin 下转发到这里；macOS 走 `install.sh`。若脚本被执行策略阻止，可用 `windows-bootstrap\install.cmd`、`-ExecutionPolicy Bypass` 或 `Set-ExecutionPolicy -Scope Process Bypass`。
-- Windows bootstrap 软件清单：[windows-bootstrap-packages.zh-CN.md](windows-bootstrap-packages.zh-CN.md) — 每一项的 WinGet ID、静默参数、验证方式与清理策略。
+- Windows bootstrap 软件清单：[windows-bootstrap-packages.zh-CN.md](windows-bootstrap-packages.zh-CN.md) — 每一项内建软件的 WinGet ID、静默参数、验证方式与清理策略。
+- Windows bootstrap 扩展：[windows-bootstrap-extensions.zh-CN.md](windows-bootstrap-extensions.zh-CN.md) — 受限外部 manifest、计划批准及 UAC/Resume provenance。
 - Windows RIME：直接入口 `pwsh.exe -NoProfile -File .\windows\install.ps1`（Windows 11 x64）；统一 bootstrap 会在 Mint 步骤调用它。
 - 代理指南：[AGENTS.md](../AGENTS.md)
 - macOS 沙箱测试：`./tests/integration.sh`

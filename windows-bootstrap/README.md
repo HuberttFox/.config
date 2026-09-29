@@ -47,6 +47,17 @@ pwsh.exe -NoProfile -File .\windows-bootstrap\install.ps1 -Profile Optional -Por
 pwsh.exe -NoProfile -File .\windows-bootstrap\install.ps1 -Profile Optional -PortableAppsRoot 'D:\PortableApps' -ConfirmPortableHandoff
 ```
 
+## 外部扩展
+
+受限的外部软件接口使用独立 `-Profile Extension`，不能混入内建
+`Base`/`Core`/`Optional`/`All`。先用 `-PlanOnly` 输出并人工检查 package-plan hash，
+再用匹配的 `-ApprovePlan` 执行。外部 manifest 只能声明仓库 allowlist 中的 `winget`
+或 `manual` provider；它不能携带命令、脚本、下载 URL 或自定义安装参数。normal-user
+phase、UAC child、Resume 和 Verify 只使用
+`%LOCALAPPDATA%\WindowsBootstrap\UserPhase\<runId>\package-plan.json` 中受保护的
+snapshot，不重新读取原始 manifest。完整 schema、模板、approval 和 provenance 规则见
+[扩展指南](../docs/windows-bootstrap-extensions.zh-CN.md)。
+
 设计约束：
 
 - 仅 Windows 11 x64；machine phase 需要管理员 PowerShell，normal-user phase 必须从同一用户的 Medium-integrity 桌面终端启动。
@@ -61,4 +72,4 @@ pwsh.exe -NoProfile -File .\windows-bootstrap\install.ps1 -Profile Optional -Por
 - 不配置系统代理、WinHTTP、Git identity、SSH key 或自定义环境变量。
 - 清理只删除本次运行记录的 owned paths；不卸载既有软件、不删除未知 AppData/注册表。PotPlayer PortableApps 目标目录始终归用户所有，不属于 bootstrap cleanup。
 
-完整软件清单（每项的 WinGet ID、静默参数、验证方式、manual 原因）见 [`../docs/windows-bootstrap-packages.zh-CN.md`](../docs/windows-bootstrap-packages.zh-CN.md)。
+内建软件清单（每项的 WinGet ID、静默参数、验证方式、manual 原因）见 [`../docs/windows-bootstrap-packages.zh-CN.md`](../docs/windows-bootstrap-packages.zh-CN.md)。外部扩展 schema、模板和安全边界见 [`../docs/windows-bootstrap-extensions.zh-CN.md`](../docs/windows-bootstrap-extensions.zh-CN.md)。

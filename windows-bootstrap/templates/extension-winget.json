@@ -1,0 +1,22 @@
+{
+  "format": 2,
+  "id": "example-tools",
+  "items": [
+    {
+      "id": "example-cli",
+      "name": "Example CLI",
+      "provider": "winget",
+      "version": "winget-latest-stable",
+      "architecture": "x64",
+      "executionContext": "elevated",
+      "source": "winget:Contoso.ExampleCli",
+      "wingetId": "Contoso.ExampleCli",
+      "wingetSource": "winget",
+      "install": {
+        "scope": "machine",
+        "silent": true,
+        "timeoutSeconds": 900
+      }
+    }
+  ]
+}

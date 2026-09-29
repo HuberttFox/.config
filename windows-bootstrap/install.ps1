@@ -1,7 +1,7 @@
 #requires -Version 5.1
 [CmdletBinding()]
 param(
-    [ValidateSet('Base', 'Core', 'Optional', 'All')]
+    [ValidateSet('Base', 'Core', 'Optional', 'All', 'Extension')]
     [string]$Profile = 'All',
     [string]$StateRoot,
     [switch]$Resume,
@@ -22,7 +22,11 @@ param(
     [switch]$LaunchPortableHandoff,
     [switch]$ConfirmPortableHandoff,
     [string]$BootstrapRunId,
-    [switch]$BootstrapUserPhaseHandoff
+    [switch]$BootstrapUserPhaseHandoff,
+    [string[]]$ExtensionManifest = @(),
+    [switch]$PlanOnly,
+    [string]$ApprovePlan,
+    [string]$BootstrapPackagePlanPath
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -37,11 +41,76 @@ function Get-BootstrapComponentFiles([string]$SelectedProfile, [bool]$IncludeOpt
         'Base' { return @('base.json') }
         'Core' { return @('base.json', 'core.json') }
         'Optional' { return @('optional.json') }
+        'Extension' { return @() }
         default {
             $files = @('base.json', 'core.json')
             if ($IncludeOptional) { $files += 'optional.json' }
             return $files
         }
+    }
+}
+
+function Get-BootstrapSelectedPackagePlan([string]$SelectedProfile, [bool]$IncludeOptional, [string[]]$RequestedExtensions, [string]$SnapshotPath, [string]$RunId, [string]$Approval) {
+    $builtInItems = @(Get-BootstrapManifestItems (Join-Path $script:BootstrapRoot 'packages') (Get-BootstrapComponentFiles $SelectedProfile $IncludeOptional))
+    if (-not [string]::IsNullOrWhiteSpace($SnapshotPath)) {
+        if ($SelectedProfile -ne 'Extension') { throw 'Bootstrap package-plan snapshots are only valid with Profile Extension' }
+        if (@($RequestedExtensions).Count -gt 0) { throw 'Bootstrap package-plan snapshot cannot be combined with ExtensionManifest' }
+        return Read-BootstrapPackagePlanSnapshot $SnapshotPath $RunId $SelectedProfile $Approval $builtInItems
+    }
+    $extensionItems = @(Get-BootstrapExtensionManifestItems $RequestedExtensions $script:BootstrapRoot)
+    if ($SelectedProfile -eq 'Extension' -and $extensionItems.Count -eq 0) {
+        throw 'Profile Extension requires at least one ExtensionManifest'
+    }
+    if ($SelectedProfile -ne 'Extension' -and $extensionItems.Count -gt 0) {
+        throw 'ExtensionManifest requires Profile Extension; do not mix external packages into a built-in profile'
+    }
+    return Get-BootstrapPackagePlan ($builtInItems + $extensionItems) (Get-BootstrapExtensionManifestRecords $extensionItems)
+}
+
+function Get-BootstrapPlanDisplay($Plan, [string]$SelectedProfile) {
+    return [ordered]@{
+        format = 1
+        profile = $SelectedProfile
+        hash = [string]$Plan.hash
+        requiresApproval = (@($Plan.extensionManifests).Count -gt 0)
+        extensionManifests = @($Plan.extensionManifests)
+        items = @($Plan.items | ForEach-Object {
+            [ordered]@{
+                id = Get-BootstrapPackageItemKey $_
+                name = [string](Get-BootstrapObjectProperty $_ 'name')
+                provider = Get-BootstrapItemProvider $_
+                executionContext = Get-BootstrapItemExecutionContext $_
+                source = [string](Get-BootstrapObjectProperty $_ 'source')
+                version = [string](Get-BootstrapObjectProperty $_ 'version')
+                cleanupMode = [string](Get-BootstrapObjectProperty $_ 'cleanupMode')
+            }
+        })
+    }
+}
+
+function Resolve-BootstrapExecutablePackagePlan(
+    [string]$SelectedProfile,
+    [bool]$IncludeOptional,
+    [string[]]$RequestedExtensions,
+    [string]$SnapshotPath,
+    [string]$RunId,
+    [string]$Approval,
+    [bool]$RequireApproval,
+    [bool]$RequireSnapshot
+) {
+    $hasSnapshot = -not [string]::IsNullOrWhiteSpace($SnapshotPath)
+    $plan = Get-BootstrapSelectedPackagePlan $SelectedProfile $IncludeOptional $RequestedExtensions $SnapshotPath $RunId $Approval
+    $hasExtensions = @($plan.extensionManifests).Count -gt 0
+    if ($RequireApproval -and $hasExtensions -and -not (Test-BootstrapApprovedPackagePlan $Approval $plan)) {
+        throw "Bootstrap extension package plan requires -ApprovePlan $($plan.hash); run -PlanOnly first"
+    }
+    if ($RequireSnapshot -and $hasExtensions -and -not $hasSnapshot) {
+        throw 'Bootstrap extension package plan must be passed to an elevated child through a protected snapshot'
+    }
+    return [pscustomobject]@{
+        plan = $plan
+        approvePlan = if ($hasExtensions) { [string]$plan.hash } else { '' }
+        snapshotPath = if ($hasSnapshot) { [IO.Path]::GetFullPath($SnapshotPath) } else { '' }
     }
 }
 
@@ -56,15 +125,86 @@ function Test-BootstrapNetwork([bool]$DryRun = $false) {
     }
 }
 
-function Add-BootstrapVerificationResult($Context) {
+function Add-BootstrapVerificationResult($Context, $Items = @()) {
     if ($Context.DryRun) {
-        return Add-BootstrapResult $Context 'final-verification' 'core' 'skipped' 'Dry run: final verification not executed' $null
+        $verificationProfile = if ([string]$Context.State.profile -eq 'Extension') { 'extension' } else { 'core' }
+        return Add-BootstrapResult $Context 'final-verification' $verificationProfile 'skipped' 'Dry run: final verification not executed' $null
     }
-    $checks = Get-BootstrapVerification $Context
+    $checks = Get-BootstrapVerification $Context $Items
     $bad = @($checks | Where-Object { -not $_.ok })
     $status = if ($bad.Count -eq 0) { 'completed' } else { 'manual_required' }
     $message = if ($bad.Count -eq 0) { 'All requested verification checks passed' } else { "Verification gaps: $($bad.name -join ', ')" }
-    return Add-BootstrapResult $Context 'final-verification' 'core' $status $message $checks
+    $verificationProfile = if ([string]$Context.State.profile -eq 'Extension') { 'extension' } else { 'core' }
+    return Add-BootstrapResult $Context 'final-verification' $verificationProfile $status $message $checks
+}
+
+function Get-BootstrapPackageResultProfile([string]$SelectedProfile, $Item, [ValidateSet('user', 'elevated')][string]$Phase) {
+    if (Test-BootstrapExtensionPackageItem $Item) { return 'extension' }
+    if ($Phase -eq 'user') { return 'user' }
+    switch (Get-BootstrapItemProvider $Item) {
+        'winget' { return 'base' }
+        'download' { return 'optional' }
+        'wsl' { return 'core' }
+        'font' { return 'core' }
+        'powershell-profile' { return 'core' }
+        'rime' { return 'core' }
+        'input-method' { return 'core' }
+        'manual' { return 'optional' }
+        'portable-handoff' { return 'optional' }
+        default { return 'unknown' }
+    }
+}
+
+function Invoke-BootstrapPackageProvider(
+    $Context,
+    $Item,
+    [string]$Winget,
+    [ValidateSet('user', 'elevated')][string]$Phase,
+    [string]$ScriptPath
+) {
+    $provider = Get-BootstrapItemProvider $Item
+    $isExtension = Test-BootstrapExtensionPackageItem $Item
+    if ($isExtension) {
+        # External JSON reaches only repository-owned provider implementations.
+        Assert-BootstrapExtensionProviderAvailability @($Item) $script:BootstrapRoot
+        if ($Phase -eq 'user' -and $provider -ne 'winget') {
+            return [pscustomobject]@{ status = 'manual_required'; message = "Extension provider '$provider' is unavailable in the normal-user phase"; details = $Item }
+        }
+        switch ($provider) {
+            'winget' { return Invoke-BootstrapWingetInstall $Context $Item $Winget }
+            'manual' { return [pscustomobject]@{ status = 'manual_required'; message = [string](Get-BootstrapObjectProperty $Item 'reason'); details = $Item } }
+            default { throw "Bootstrap extension provider dispatch rejected: $provider" }
+        }
+    }
+
+    if ($Phase -eq 'user') {
+        switch ($provider) {
+            'winget' { return Invoke-BootstrapWingetInstall $Context $Item $Winget }
+            'portable-handoff' {
+                return Install-BootstrapPortableHandoff $Context $Item $PortableAppsRoot -Launch:$LaunchPortableHandoff -Confirm:$ConfirmPortableHandoff
+            }
+            default {
+                return [pscustomobject]@{ status = 'manual_required'; message = "Unsupported normal-user phase provider: $provider"; details = $Item }
+            }
+        }
+    }
+
+    switch ($provider) {
+        'winget' { return Invoke-BootstrapWingetInstall $Context $Item $Winget }
+        'download' { return Install-BootstrapDownloadApp $Context $Item }
+        'wsl' { return Install-BootstrapWsl $Context $ScriptPath -NoReboot:$NoReboot }
+        'font' { return Install-BootstrapFonts $Context }
+        'powershell-profile' { return Install-BootstrapPowerShellConfig $Context }
+        'rime' { return Invoke-BootstrapRime $Context -SkipRime:$SkipRime }
+        'input-method' { return Configure-BootstrapMintInputMethod $Context }
+        'manual' { return [pscustomobject]@{ status = 'manual_required'; message = [string](Get-BootstrapObjectProperty $Item 'reason'); details = $Item } }
+        'portable-handoff' {
+            return [pscustomobject]@{ status = 'manual_required'; message = 'PortableApps handoff requires the normal-user phase'; details = $Item }
+        }
+        default {
+            return [pscustomobject]@{ status = 'manual_required'; message = "Unsupported manifest provider: $provider"; details = $Item }
+        }
+    }
 }
 
 function Get-BootstrapOperation {
@@ -80,8 +220,51 @@ function Get-BootstrapOperation {
     return 'Run'
 }
 
+function Get-BootstrapPersistedExtensionPlanReference([string]$SelectedProfile, [string]$SelectedOperation, [string]$RequestedStateRoot, [string]$RequestedRunId, [string]$SnapshotPath, [string]$ApprovedPlan) {
+    $fallback = [pscustomobject]@{
+        isExtension = $false
+        profile = $SelectedProfile
+        snapshotPath = $SnapshotPath
+        approvePlan = $ApprovedPlan
+        runId = $RequestedRunId
+    }
+    if ($SelectedOperation -notin @('Resume', 'Verify', 'Cleanup')) { return $fallback }
+    $stateRoot = if ([string]::IsNullOrWhiteSpace($RequestedStateRoot)) { Get-BootstrapDefaultStateRoot } else { [IO.Path]::GetFullPath($RequestedStateRoot) }
+    $statePath = Join-Path $stateRoot 'state.json'
+    $state = Read-BootstrapJson $statePath
+    if ($null -eq $state) {
+        if ($SelectedProfile -eq 'Extension' -or $SelectedOperation -in @('Resume', 'Cleanup')) {
+            throw "No prior Windows bootstrap state found: $statePath"
+        }
+        return $fallback
+    }
+    $state = Ensure-BootstrapStateShape $state
+    if ([string](Get-BootstrapObjectProperty $state 'profile') -cne 'Extension') {
+        if ($SelectedProfile -eq 'Extension' -and $SelectedOperation -in @('Resume', 'Verify', 'Cleanup')) {
+            throw 'Persisted Windows bootstrap state is not an Extension run; Extension Resume/Verify/Cleanup require the original protected plan'
+        }
+        return $fallback
+    }
+    $runId = [string](Get-BootstrapObjectProperty $state 'runId')
+    if (-not (Test-BootstrapRunId $runId)) { throw 'Persisted Extension state has an invalid run ID' }
+    if (-not [string]::IsNullOrWhiteSpace($RequestedRunId) -and $RequestedRunId -cne $runId) {
+        throw 'Requested Extension run ID does not match persisted state'
+    }
+    $reference = Get-BootstrapExtensionResumePlanReference $state $SnapshotPath $ApprovedPlan
+    return [pscustomobject]@{
+        isExtension = $true
+        profile = 'Extension'
+        snapshotPath = [string]$reference.snapshotPath
+        approvePlan = [string]$reference.approvePlan
+        runId = $runId
+    }
+}
+
 function Get-BootstrapUserPhasePlan([string]$Operation) {
     if ($Operation -notin @('Run', 'Resume')) { throw "User phase is not valid for operation: $Operation" }
+    if ($Operation -eq 'Resume' -and @($ExtensionManifest).Count -gt 0) {
+        throw 'Resume cannot reload ExtensionManifest; it must use the protected package-plan snapshot recorded by the original run'
+    }
     $mainStateRoot = if ([string]::IsNullOrWhiteSpace($StateRoot)) { Get-BootstrapDefaultStateRoot } else { [IO.Path]::GetFullPath($StateRoot) }
     $statePath = Join-Path $mainStateRoot 'state.json'
     $existingState = Read-BootstrapJson $statePath
@@ -115,16 +298,26 @@ function Get-BootstrapUserPhasePlan([string]$Operation) {
         $options = Get-BootstrapObjectProperty $existingState 'executionOptions'
         if ($null -ne $options -and [bool](Get-BootstrapObjectProperty $options 'noOptional')) { $effectiveNoOptional = $true }
     }
-    $files = Get-BootstrapComponentFiles $selected ($selected -eq 'All' -and -not $effectiveNoOptional)
-    $items = @(Get-BootstrapManifestItems (Join-Path $script:BootstrapRoot 'packages') $files)
     if ([string]::IsNullOrWhiteSpace($runId)) { $runId = [guid]::NewGuid().ToString('N') }
+    $snapshotPath = $BootstrapPackagePlanPath
+    $approval = $ApprovePlan
+    if ($Operation -eq 'Resume' -and [string]$selected -eq 'Extension') {
+        $resumeReference = Get-BootstrapExtensionResumePlanReference $existingState $snapshotPath $approval
+        $snapshotPath = [string]$resumeReference.snapshotPath
+        $approval = [string]$resumeReference.approvePlan
+    }
+    $resolved = Resolve-BootstrapExecutablePackagePlan $selected ($selected -eq 'All' -and -not $effectiveNoOptional) $ExtensionManifest $snapshotPath $runId $approval $true $false
     return [pscustomobject]@{
         stateRoot = $mainStateRoot
         runId = $runId.ToLowerInvariant()
         profile = $selected
         noOptional = $effectiveNoOptional
-        items = $items
-        userItems = @(Get-BootstrapUserPhaseItems $items)
+        plan = $resolved.plan
+        packagePlanHash = [string]$resolved.plan.hash
+        approvePlan = $resolved.approvePlan
+        snapshotPath = $resolved.snapshotPath
+        items = @($resolved.plan.items)
+        userItems = @(Get-BootstrapUserPhaseItems @($resolved.plan.items))
     }
 }
 
@@ -163,6 +356,23 @@ function Assert-BootstrapUserPhaseHost {
 }
 
 function Invoke-BootstrapUserPhase($Plan) {
+    if ([string]$Plan.profile -eq 'Extension') {
+        $snapshotPath = [string](Get-BootstrapObjectProperty $Plan 'snapshotPath')
+        $approval = [string](Get-BootstrapObjectProperty $Plan 'approvePlan')
+        if ([string]::IsNullOrWhiteSpace($snapshotPath) -or [string]::IsNullOrWhiteSpace($approval)) {
+            throw 'Extension normal-user phase requires a protected package-plan snapshot and approval hash'
+        }
+        # The normal-user phase must consume the same protected record as the
+        # UAC child and Resume. It must not rely on a parsed raw manifest object.
+        $protectedPlan = Read-BootstrapPackagePlanSnapshot $snapshotPath ([string]$Plan.runId) 'Extension' $approval @()
+        if ([string]$Plan.packagePlanHash -cne [string]$protectedPlan.hash) {
+            throw 'Extension normal-user phase plan hash does not match its protected snapshot'
+        }
+        $Plan.plan = $protectedPlan
+        $Plan.packagePlanHash = [string]$protectedPlan.hash
+        $Plan.items = @($protectedPlan.items)
+        $Plan.userItems = @(Get-BootstrapUserPhaseItems @($protectedPlan.items))
+    }
     $userHost = Assert-BootstrapUserPhaseHost
     if ([string]$userHost.IntegritySid -cne 'S-1-16-8192') {
         throw "Normal-user bootstrap phase requires a medium-integrity token; detected: $($userHost.IntegritySid)"
@@ -183,21 +393,9 @@ function Invoke-BootstrapUserPhase($Plan) {
         foreach ($item in @($Plan.userItems)) {
             $stepStarted = Get-Date
             Write-BootstrapConsole $context (Format-BootstrapStepLine 0 $Plan.userItems.Count ([string]$item.name) '' 0)
-            switch ([string]$item.mode) {
-                'winget' {
-                    Invoke-BootstrapStep $context ([string]$item.name) 'user' { Invoke-BootstrapWingetInstall $context $item $winget } | Out-Null
-                }
-                'portable-handoff' {
-                    Invoke-BootstrapStep $context ([string]$item.name) 'user' {
-                        Install-BootstrapPortableHandoff $context $item $PortableAppsRoot -Launch:$LaunchPortableHandoff -Confirm:$ConfirmPortableHandoff
-                    } | Out-Null
-                }
-                default {
-                    Invoke-BootstrapStep $context ([string]$item.name) 'user' {
-                        [pscustomobject]@{ status = 'manual_required'; message = "Unsupported normal-user phase mode: $($item.mode)"; details = $null }
-                    } | Out-Null
-                }
-            }
+            Invoke-BootstrapStep $context ([string]$item.name) 'user' {
+                Invoke-BootstrapPackageProvider $context $item $winget 'user' $PSCommandPath
+            } | Out-Null
             $result = Get-BootstrapLatestResult $context ([string]$item.name)
             Write-BootstrapConsole $context (Format-BootstrapStepLine 0 $Plan.userItems.Count ([string]$item.name) ([string]$result.status) (((Get-Date) - $stepStarted).TotalSeconds))
         }
@@ -219,6 +417,7 @@ function Invoke-BootstrapUserPhase($Plan) {
             profile = [string]$Plan.profile
             host = $userHost
             manifestFingerprint = Get-BootstrapUserPhaseManifestFingerprint $Plan.items
+            packagePlanHash = [string]$Plan.packagePlanHash
             results = $records
         }
         Write-BootstrapJson $handoffPath $handoff
@@ -300,7 +499,10 @@ function Import-BootstrapUserPhaseHandoff($Context, $Items, [bool]$UserPhaseHand
         $handoff = Read-BootstrapJson $handoffPath
         # The handoff marker is provenance, not an optimization hint.
         # Validate every user item even when a live probe says it is installed.
-        $validation = Test-BootstrapUserPhaseHandoffData $handoff $Context.RunId $ownerSid $Items ([string]$Context.State.profile)
+        $expectedPlanHash = ''
+        $recordedPlan = Get-BootstrapObjectProperty $Context.State 'packagePlan'
+        if ([string]$Context.State.profile -eq 'Extension') { $expectedPlanHash = [string](Get-BootstrapObjectProperty $recordedPlan 'hash') }
+        $validation = Test-BootstrapUserPhaseHandoffData $handoff $Context.RunId $ownerSid $Items ([string]$Context.State.profile) $expectedPlanHash
         if (-not $validation.valid) { throw "Normal-user phase handoff rejected: $($validation.reason)" }
     } catch {
         $reason = $_.Exception.Message
@@ -322,6 +524,9 @@ function Import-BootstrapUserPhaseHandoff($Context, $Items, [bool]$UserPhaseHand
 function Invoke-BootstrapRun {
     $selected = if ($NoOptional -and $Profile -eq 'All') { 'Core' } else { $Profile }
     $operation = Get-BootstrapOperation
+    if ($operation -eq 'Resume' -and @($ExtensionManifest).Count -gt 0) {
+        throw 'Resume cannot reload ExtensionManifest; use the protected package-plan snapshot recorded by the original run'
+    }
     $context = New-BootstrapContext $StateRoot $selected ([bool]$DryRun) $operation $script:RepositoryRoot -Force:$Force -Quiet:$Quiet -Silent:([bool]$PassThru) -RunId $BootstrapRunId
     $selected = [string]$context.State.profile
     Write-BootstrapConsole $context ("Windows bootstrap: operation={0}, profile={1}" -f $operation, $selected)
@@ -331,7 +536,7 @@ function Invoke-BootstrapRun {
     }
     if ($operation -eq 'Report') { return $context }
 
-    if ($operation -in @('Run', 'Resume')) {
+    if ($operation -in @('Run', 'Resume') -and -not $context.DryRun) {
         $policy = Get-BootstrapInstallPolicy
         $context | Add-Member -NotePropertyName 'InstallPolicy' -NotePropertyValue $policy -Force
         $context.State.installPolicy = $policy
@@ -344,6 +549,14 @@ function Invoke-BootstrapRun {
     Enter-BootstrapLock $context
     try {
         if ($operation -eq 'Verify') {
+            $verificationSnapshotPath = $BootstrapPackagePlanPath
+            $verificationApproval = $ApprovePlan
+            if ([string]$selected -eq 'Extension') {
+                $verificationReference = Get-BootstrapExtensionResumePlanReference $context.State $verificationSnapshotPath $verificationApproval
+                $verificationSnapshotPath = [string]$verificationReference.snapshotPath
+                $verificationApproval = [string]$verificationReference.approvePlan
+            }
+            $verificationResolvedPlan = Resolve-BootstrapExecutablePackagePlan $selected ($selected -eq 'All' -and -not $NoOptional) $ExtensionManifest $verificationSnapshotPath $context.RunId $verificationApproval (-not [bool]$DryRun) (-not [bool]$DryRun)
             if ($DryRun) {
                 $context.Report.host = [pscustomobject]@{
                     Platform = [Environment]::OSVersion.Platform
@@ -358,11 +571,18 @@ function Invoke-BootstrapRun {
             } else {
                 $context.Report.host = Get-BootstrapHostInfo
             }
-            Add-BootstrapVerificationResult $context | Out-Null
+            Add-BootstrapVerificationResult $context $verificationResolvedPlan.plan.items | Out-Null
             Save-BootstrapContext $context
             return $context
         }
         if ($operation -eq 'Cleanup') {
+            if ([string]$selected -eq 'Extension') {
+                # Cleanup does not dispatch external providers today, but it is
+                # still a mutating elevated operation. Validate state-recorded
+                # provenance before consuming any Extension lifecycle state.
+                $cleanupReference = Get-BootstrapExtensionResumePlanReference $context.State $BootstrapPackagePlanPath $ApprovePlan
+                [void](Resolve-BootstrapExecutablePackagePlan 'Extension' $false @() ([string]$cleanupReference.snapshotPath) $context.RunId ([string]$cleanupReference.approvePlan) $true $true)
+            }
             $previousPhase = [string]$context.State.phase
             $context.State.phase = 'cleanup'
             Save-BootstrapContext $context
@@ -404,12 +624,22 @@ function Invoke-BootstrapRun {
                 if ([bool]$savedOptions.noNetworkCheck) { $NoNetworkCheck = $true }
             }
         }
+        $snapshotPath = $BootstrapPackagePlanPath
+        $approval = $ApprovePlan
+        if ($operation -eq 'Resume' -and [string]$selected -eq 'Extension') {
+            $resumeReference = Get-BootstrapExtensionResumePlanReference $context.State $snapshotPath $approval
+            $snapshotPath = [string]$resumeReference.snapshotPath
+            $approval = [string]$resumeReference.approvePlan
+        }
+        # Validate an extension plan before any stateful preflight step. This
+        # prevents a rejected approval from creating backup or package records.
+        $resolvedPlan = Resolve-BootstrapExecutablePackagePlan $selected ($selected -eq 'All' -and -not $NoOptional) $ExtensionManifest $snapshotPath $context.RunId $approval (-not [bool]$DryRun) (-not [bool]$DryRun)
         Save-BootstrapContext $context
-        if ($operation -eq 'Run') {
+        if ($operation -eq 'Run' -and [string]$selected -ne 'Extension') {
             Invoke-BootstrapStep $context 'user-config-backup' 'preflight' { Backup-BootstrapUserFiles $context } | Out-Null
         }
-        $context.State.phase = 'preflight'
-        $context.State.nextPhase = 'base'
+        $context.State.phase = if ([string]$selected -eq 'Extension') { 'extension' } else { 'preflight' }
+        $context.State.nextPhase = if ([string]$selected -eq 'Extension') { 'extension' } else { 'base' }
         Save-BootstrapContext $context
 
         if (-not $NoNetworkCheck) {
@@ -434,13 +664,20 @@ function Invoke-BootstrapRun {
             Add-BootstrapResult $context 'winget' 'preflight' $wingetStatus $wingetMessage @{ path = $winget } | Out-Null
         }
 
-        $manifestDirectory = Join-Path $script:BootstrapRoot 'packages'
-        $items = @(Get-BootstrapManifestItems $manifestDirectory (Get-BootstrapComponentFiles $selected ($selected -eq 'All' -and -not $NoOptional)))
+        $packagePlan = $resolvedPlan.plan
+        $context.State.packagePlan = Get-BootstrapPackagePlanRecord $packagePlan
+        if (-not [string]::IsNullOrWhiteSpace([string]$resolvedPlan.snapshotPath)) {
+            $context.State.packagePlan.snapshotPath = [string]$resolvedPlan.snapshotPath
+        }
+        Set-BootstrapObjectProperty $context.State.executionOptions 'bootstrapPackagePlanPath' ([string]$resolvedPlan.snapshotPath)
+        Set-BootstrapObjectProperty $context.State.executionOptions 'approvedPlan' ([string]$resolvedPlan.approvePlan)
+        Save-BootstrapContext $context
+        $items = @($packagePlan.items)
         $userPhaseHandoffExpected = [bool]$BootstrapUserPhaseHandoff
         if (-not $DryRun) {
             Import-BootstrapUserPhaseHandoff $context $items $userPhaseHandoffExpected
         }
-        $context.State.phase = 'base'
+        $context.State.phase = if ([string]$selected -eq 'Extension') { 'extension' } else { 'base' }
         $itemTotal = $items.Count
         $itemIndex = 0
         $progressEnabled = -not $context.DryRun -and -not [bool]$context.Quiet -and -not [bool]$context.Silent -and -not $NoProgress -and $ProgressPreference -ne 'SilentlyContinue'
@@ -470,39 +707,10 @@ function Invoke-BootstrapRun {
                 Write-Progress -Activity 'Windows bootstrap' -Status ("[$itemIndex/$itemTotal] $($item.name)") -PercentComplete ([int](($itemIndex - 1) * 100 / [Math]::Max(1, $itemTotal)))
             }
             $stepStarted = Get-Date
-            $mode = [string]$item.mode
-            switch ($mode) {
-                'winget' {
-                    Invoke-BootstrapStep $context ([string]$item.name) 'base' { Invoke-BootstrapWingetInstall $context $item $winget } | Out-Null
-                }
-                'download' {
-                    Invoke-BootstrapStep $context ([string]$item.name) 'optional' { Install-BootstrapDownloadApp $context $item } | Out-Null
-                }
-                'wsl' {
-                    Invoke-BootstrapStep $context ([string]$item.name) 'core' { Install-BootstrapWsl $context $PSCommandPath -NoReboot:$NoReboot } | Out-Null
-                }
-                'font' {
-                    Invoke-BootstrapStep $context ([string]$item.name) 'core' { Install-BootstrapFonts $context } | Out-Null
-                }
-                'powershell-profile' {
-                    Invoke-BootstrapStep $context ([string]$item.name) 'core' { Install-BootstrapPowerShellConfig $context } | Out-Null
-                }
-                'rime' {
-                    Invoke-BootstrapStep $context ([string]$item.name) 'core' { Invoke-BootstrapRime $context -SkipRime:$SkipRime } | Out-Null
-                }
-                'input-method' {
-                    Invoke-BootstrapStep $context ([string]$item.name) 'core' { Configure-BootstrapMintInputMethod $context } | Out-Null
-                }
-                'manual' {
-                    Invoke-BootstrapStep $context ([string]$item.name) 'optional' { [pscustomobject]@{ status = 'manual_required'; message = [string]$item.reason; details = $item } } | Out-Null
-                }
-                'portable-handoff' {
-                    Invoke-BootstrapStep $context ([string]$item.name) 'optional' { [pscustomobject]@{ status = 'manual_required'; message = 'PortableApps handoff requires the normal-user phase'; details = $item } } | Out-Null
-                }
-                default {
-                    Invoke-BootstrapStep $context ([string]$item.name) 'unknown' { [pscustomobject]@{ status = 'manual_required'; message = "Unsupported manifest mode: $mode"; details = $item } } | Out-Null
-                }
-            }
+            $itemProfile = Get-BootstrapPackageResultProfile $selected $item 'elevated'
+            Invoke-BootstrapStep $context ([string]$item.name) $itemProfile {
+                Invoke-BootstrapPackageProvider $context $item $winget 'elevated' $PSCommandPath
+            } | Out-Null
             Save-BootstrapContext $context
             $stepResult = Get-BootstrapLatestResult $context ([string]$item.name)
             $stepSeconds = ((Get-Date) - $stepStarted).TotalSeconds
@@ -519,7 +727,7 @@ function Invoke-BootstrapRun {
         if ($progressEnabled) { Write-Progress -Activity 'Windows bootstrap' -Completed }
         $context.State.phase = 'verification'
         $context.State.nextPhase = 'completed'
-        Add-BootstrapVerificationResult $context | Out-Null
+        Add-BootstrapVerificationResult $context $items | Out-Null
         if ($context.State.resumeTask) {
             Remove-BootstrapResumeTask ([string]$context.State.resumeTask)
             $context.State.resumeTask = $null
@@ -541,32 +749,109 @@ function Invoke-BootstrapRun {
 }
 
 try {
-    # DryRun is read-only and never elevates, even though its base operation is Run.
+    # PlanOnly and DryRun are read-only. Neither creates state nor requests UAC.
     $operation = Get-BootstrapOperation
+    if ($PlanOnly -and ($Resume -or $Verify -or $Report -or $CleanupFailed -or $DryRun)) {
+        throw 'PlanOnly cannot be combined with an operation switch or DryRun'
+    }
+    if ($PlanOnly) {
+        if ([string]::IsNullOrWhiteSpace($BootstrapRunId)) { $BootstrapRunId = [guid]::NewGuid().ToString('N') }
+        if (-not (Test-BootstrapRunId $BootstrapRunId)) { throw "Invalid Windows bootstrap run ID: $BootstrapRunId" }
+        $selectedPlanProfile = if ($NoOptional -and $Profile -eq 'All') { 'Core' } else { $Profile }
+        $plan = Get-BootstrapSelectedPackagePlan $selectedPlanProfile ($selectedPlanProfile -eq 'All' -and -not $NoOptional) $ExtensionManifest '' $BootstrapRunId ''
+        ConvertTo-BootstrapJsonText (Get-BootstrapPlanDisplay $plan $selectedPlanProfile)
+        exit 0
+    }
+    $selectedPlanProfile = if ($NoOptional -and $Profile -eq 'All') { 'Core' } else { $Profile }
+    $hasRequestedExtensions = @($ExtensionManifest | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }).Count -gt 0
+    if ($hasRequestedExtensions -and $operation -in @('Resume', 'Verify', 'Report', 'Cleanup')) {
+        throw 'Only Run, PlanOnly, and DryRun may read ExtensionManifest; Resume, Verify, Report, and Cleanup use persisted protected state'
+    }
+    if ($hasRequestedExtensions -and $selectedPlanProfile -ne 'Extension') {
+        throw 'ExtensionManifest requires Profile Extension; do not mix external packages into a built-in profile'
+    }
+    $persistedExtension = Get-BootstrapPersistedExtensionPlanReference $selectedPlanProfile $operation $StateRoot $BootstrapRunId $BootstrapPackagePlanPath $ApprovePlan
+    if ($persistedExtension.isExtension) {
+        $selectedPlanProfile = [string]$persistedExtension.profile
+        $BootstrapRunId = [string]$persistedExtension.runId
+        $BootstrapPackagePlanPath = [string]$persistedExtension.snapshotPath
+        $ApprovePlan = [string]$persistedExtension.approvePlan
+    }
     if ($DryRun) { $operation = 'DryRun' }
-    $isAdministrator = Test-BootstrapAdministrator
+    $isAdministrator = if ($DryRun) { $false } else { Test-BootstrapAdministrator }
+    if ($operation -eq 'Resume' -and $hasRequestedExtensions) {
+        throw 'Resume cannot reload ExtensionManifest; use the protected package-plan snapshot recorded by the original run'
+    }
+    # Reject malformed or unapproved extension input before New-BootstrapContext
+    # can create machine state. Normal-user Run then rebuilds this plan once to
+    # create the protected snapshot for UAC; no raw manifest crosses that boundary.
+    if (-not $DryRun -and $selectedPlanProfile -eq 'Extension' -and $operation -in @('Run', 'Resume', 'Verify', 'Cleanup')) {
+        # An already-elevated shell must never parse a raw external manifest.
+        # The normal-user parent is solely responsible for parsing it and then
+        # passing a protected snapshot to the UAC child. Resume, Verify, and
+        # Cleanup validate their persisted snapshot before creating context.
+        if ($isAdministrator -and $operation -in @('Run', 'Verify') -and [string]::IsNullOrWhiteSpace($BootstrapPackagePlanPath)) {
+            throw 'Elevated Profile Extension requires a protected BootstrapPackagePlanPath created by a normal-user parent'
+        }
+        $preflightPlan = Get-BootstrapSelectedPackagePlan $selectedPlanProfile $false $ExtensionManifest $BootstrapPackagePlanPath $BootstrapRunId $ApprovePlan
+        if (-not (Test-BootstrapApprovedPackagePlan $ApprovePlan $preflightPlan)) {
+            throw "Bootstrap extension package plan requires -ApprovePlan $($preflightPlan.hash); run -PlanOnly first"
+        }
+    }
+    if (-not $DryRun -and -not $isAdministrator -and [bool]$NoElevate -and $operation -in @('Run', 'Resume', 'Verify', 'Cleanup')) {
+        throw "Administrator privileges are required for '$operation'; -NoElevate forbids the required relaunch"
+    }
     if (Test-BootstrapElevationRequired $isAdministrator $operation ([bool]$NoElevate)) {
         $relayStateRoot = if ([string]::IsNullOrWhiteSpace($StateRoot)) { Get-BootstrapDefaultStateRoot } else { [IO.Path]::GetFullPath($StateRoot) }
+        $elevationPlan = $null
+        $elevationSnapshotPath = ''
+        $elevationApproval = $ApprovePlan
         # User-scoped packages must run before UAC. An elevated process cannot
         # safely create a medium-integrity child with the original token.
         if ($operation -in @('Run', 'Resume')) {
             $plan = Get-BootstrapUserPhasePlan $operation
+            $BootstrapRunId = [string]$plan.runId
+            $elevationPlan = $plan.plan
+            $elevationApproval = [string]$plan.approvePlan
+            $elevationSnapshotPath = [string]$plan.snapshotPath
+            if (@($elevationPlan.extensionManifests).Count -gt 0) {
+                if ([string]::IsNullOrWhiteSpace($elevationSnapshotPath)) {
+                    $elevationSnapshotPath = Write-BootstrapPackagePlanSnapshot $BootstrapRunId ([string]$plan.profile) $elevationPlan $elevationApproval
+                }
+                $protected = Resolve-BootstrapExecutablePackagePlan ([string]$plan.profile) $false @() $elevationSnapshotPath $BootstrapRunId $elevationApproval $true $true
+                $elevationPlan = $protected.plan
+                $elevationApproval = [string]$protected.approvePlan
+                $elevationSnapshotPath = [string]$protected.snapshotPath
+                $plan.plan = $elevationPlan
+                $plan.packagePlanHash = [string]$elevationPlan.hash
+                $plan.approvePlan = $elevationApproval
+                $plan.snapshotPath = $elevationSnapshotPath
+                $plan.items = @($elevationPlan.items)
+                $plan.userItems = @(Get-BootstrapUserPhaseItems @($elevationPlan.items))
+            }
             if ($plan.userItems.Count -gt 0) {
                 $phase = Invoke-BootstrapUserPhase $plan
-                $BootstrapRunId = [string]$phase.runId
                 $BootstrapUserPhaseHandoff = $true
-            } else {
-                $BootstrapRunId = [string]$plan.runId
             }
+        } elseif ($operation -in @('Verify', 'Cleanup') -and [string]$selectedPlanProfile -eq 'Extension') {
+            if ([string]::IsNullOrWhiteSpace($BootstrapRunId)) { throw "$operation Profile Extension requires BootstrapRunId and a protected package-plan snapshot" }
+            $elevationPlan = Get-BootstrapSelectedPackagePlan $selectedPlanProfile $false $ExtensionManifest $BootstrapPackagePlanPath $BootstrapRunId $ApprovePlan
+            $elevationApproval = [string]$elevationPlan.hash
+            $elevationSnapshotPath = [string]$BootstrapPackagePlanPath
+            if ([string]::IsNullOrWhiteSpace($elevationSnapshotPath)) { throw "$operation Profile Extension requires BootstrapPackagePlanPath" }
         }
         $hostPath = $null
         try { $hostPath = (Get-Process -Id $PID -ErrorAction Stop).Path } catch { }
         if ([string]::IsNullOrWhiteSpace($hostPath)) { $hostPath = Join-Path $PSHOME 'powershell.exe' }
-        $elevationParameters = @{}
-        foreach ($name in @($PSBoundParameters.Keys)) { $elevationParameters[$name] = $PSBoundParameters[$name] }
+        # External source manifests never cross the privilege boundary. The child
+        # receives only the protected, hash-bound plan snapshot.
+        $elevationParameters = Get-BootstrapElevatedChildParameters $PSBoundParameters $elevationSnapshotPath $elevationApproval
         # Preserve parent resolution when UAC starts from a different working directory.
         $elevationParameters['StateRoot'] = $relayStateRoot
-        if ($operation -in @('Run', 'Resume')) { $elevationParameters['BootstrapRunId'] = $BootstrapRunId }
+        if ($operation -in @('Run', 'Resume') -or ($operation -in @('Verify', 'Cleanup') -and $selectedPlanProfile -eq 'Extension')) {
+            $elevationParameters['BootstrapRunId'] = $BootstrapRunId
+        }
+        if ($selectedPlanProfile -eq 'Extension') { $elevationParameters['Profile'] = 'Extension' }
         if ($BootstrapUserPhaseHandoff) {
             $elevationParameters['BootstrapUserPhaseHandoff'] = [System.Management.Automation.SwitchParameter]::new($true)
         }
@@ -598,6 +883,9 @@ try {
             }
         }
         exit [int]$elevated.ExitCode
+    }
+    if ($isAdministrator -and $operation -in @('Run', 'Verify') -and $Profile -eq 'Extension' -and [string]::IsNullOrWhiteSpace($BootstrapPackagePlanPath) -and -not $DryRun) {
+        throw 'Elevated Profile Extension requires a protected BootstrapPackagePlanPath created by a normal-user parent'
     }
     $result = Invoke-BootstrapRun
     if ($Report -or $PassThru) {

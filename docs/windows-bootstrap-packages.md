@@ -6,6 +6,11 @@ Per-item reference for the manifests consumed by [`windows-bootstrap/install.ps1
 
 Run order and group selection: `Base` → `Core` → `Optional`. `-Profile Base|Core|Optional|All` selects the subset; `-NoOptional` removes the optional group from `All`.
 
+External `format: 2` manifests are not built-in package manifests and cannot be
+mixed into these groups. They use `-Profile Extension`, an explicit plan hash
+approval, repository-owned providers, and a protected UAC/Resume snapshot. See
+[Windows Bootstrap Extensions](windows-bootstrap-extensions.md).
+
 ## Execution model
 
 Every manifest item must define the full contract below, or the installer throws before running anything:

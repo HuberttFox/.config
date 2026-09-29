@@ -6,6 +6,10 @@
 
 运行顺序与分组：`Base` → `Core` → `Optional`。`-Profile Base|Core|Optional|All` 选择子集；`-NoOptional` 从 `All` 中去掉可选组。
 
+外部 `format: 2` manifest 不属于这些内建 package manifest，不能混入这些组。它使用独立的
+`-Profile Extension`、显式 plan hash 批准、仓库受控 provider 和受保护的 UAC/Resume
+snapshot。见 [Windows Bootstrap 扩展](windows-bootstrap-extensions.zh-CN.md)。
+
 ## 执行模型
 
 清单项必须满足完整契约，否则安装器在运行任何组件前直接报错：

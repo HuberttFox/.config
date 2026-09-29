@@ -6,7 +6,7 @@
 
 ## Windows 边界
 
-Windows 功能与 `install.sh` 分离。`windows-bootstrap/` 是无人值守 Windows 11 入口，兼容 Windows PowerShell 5.1 与 PowerShell 7；`windows/` 是 PowerShell 7 x64 的 RIME 部署。参见 [Windows bootstrap](../windows-bootstrap/README.md) 与 [Windows RIME](../windows/README.zh-CN.md)。便携 suite 不等于原生验收；见 [Windows 原生验收](architecture.zh-CN.md#windows-原生验收) 与 [验收证据](handoff-windows-rime-native-acceptance-evidence.md)。
+Windows 功能与 `install.sh` 分离。`windows-bootstrap/` 是无人值守 Windows 11 入口，兼容 Windows PowerShell 5.1 与 PowerShell 7；`windows/` 是 PowerShell 7 x64 的 RIME 部署。参见 [Windows bootstrap](../windows-bootstrap/README.md)、[Windows Bootstrap 扩展](windows-bootstrap-extensions.zh-CN.md) 与 [Windows RIME](../windows/README.zh-CN.md)。便携 suite 不等于原生验收；见 [Windows 原生验收](architecture.zh-CN.md#windows-原生验收) 与 [验收证据](handoff-windows-rime-native-acceptance-evidence.md)。
 
 ## 环境
 
@@ -43,6 +43,7 @@ pwsh -NoProfile -File .\tests\windows\run.ps1
 - 测试使用临时 `HOME`/状态目录与 stub。绝不可调用真实 Homebrew、网络、`sudo`、`chsh` 或应用安装器。
 - `--dry-run` 故意不支持；请用集成测试代替。
 - `windows-bootstrap` 改动必须配套 `windows-bootstrap/tests/run.ps1` 覆盖，并保持 `-DryRun` 不产生 state/report/lock/Registry/profile/WSL/输入法变更。
+- 外部软件只能写入 `format: 2` Extension manifest，只能使用已文档化的仓库受控 provider；绝不接受任意 command/script/URL/downloader 字段。变更 provider 必须经代码审查、portable coverage、契约文档和适用的 Windows 11 原生验收。
 - 新增 RIME `.ps1` 文件必须声明 `#requires -Version 7.0`；`windows-bootstrap` 脚本有意声明 `#requires -Version 5.1`。
 
 ## Bash 风格

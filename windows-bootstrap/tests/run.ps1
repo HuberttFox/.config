@@ -68,6 +68,107 @@ function New-TestContext([string]$Name) {
     }
 }
 
+function Test-Throws([scriptblock]$Action) {
+    try {
+        & $Action
+        return $false
+    } catch {
+        return $true
+    }
+}
+
+function New-TestExtensionWingetItem(
+    [string]$Id,
+    [string]$Name,
+    [ValidateSet('elevated', 'user')][string]$ItemContext = 'elevated',
+    [string]$WingetId = 'Contoso.ExtensionFixture'
+) {
+    $scope = if ($ItemContext -eq 'user') { 'user' } else { 'machine' }
+    return [ordered]@{
+        id = $Id
+        name = $Name
+        provider = 'winget'
+        version = 'winget-latest-stable'
+        architecture = 'x64'
+        executionContext = $ItemContext
+        source = "winget:$WingetId"
+        wingetId = $WingetId
+        wingetSource = 'winget'
+        install = [ordered]@{ scope = $scope; silent = $true; timeoutSeconds = 120 }
+    }
+}
+
+function New-TestExtensionManualItem([string]$Id, [string]$Name, [string]$Reason = 'Requires a visible vendor workflow') {
+    return [ordered]@{
+        id = $Id
+        name = $Name
+        provider = 'manual'
+        version = 'manual-review'
+        architecture = 'x64'
+        executionContext = 'elevated'
+        source = "manual:fixture/$Id"
+        checksum = 'manual-review'
+        reason = $Reason
+    }
+}
+
+function Write-TestExtensionManifest(
+    [string]$Directory,
+    [string]$ExtensionId,
+    $Items,
+    [string]$FileName = 'extension.json',
+    [switch]$Utf8Bom
+) {
+    New-Item -ItemType Directory -Path $Directory -Force | Out-Null
+    $path = Join-Path $Directory $FileName
+    $document = [ordered]@{ format = 2; id = $ExtensionId; items = @($Items) }
+    if ($Utf8Bom) {
+        $encoding = New-Object Text.UTF8Encoding($true)
+        [IO.File]::WriteAllText($path, (ConvertTo-BootstrapJsonText $document), $encoding)
+    } else {
+        Write-BootstrapJson $path $document
+    }
+    return $path
+}
+
+function Get-TestExtensionPlan([string[]]$Paths) {
+    $bootstrapRoot = Join-Path $script:RepoRoot 'windows-bootstrap'
+    $items = @(Get-BootstrapExtensionManifestItems $Paths $bootstrapRoot)
+    return Get-BootstrapPackagePlan $items (Get-BootstrapExtensionManifestRecords $items)
+}
+
+function Invoke-TestBootstrapEntry([string[]]$Arguments) {
+    $engine = ''
+    try { $engine = [string](Get-Process -Id $PID -ErrorAction Stop).Path } catch { }
+    if ([string]::IsNullOrWhiteSpace($engine)) {
+        $candidate = if ($PSVersionTable.PSVersion.Major -ge 7) { 'pwsh.exe' } else { 'powershell.exe' }
+        $engine = Join-Path $PSHOME $candidate
+    }
+    $scriptPath = Join-Path $script:RepoRoot 'windows-bootstrap\install.ps1'
+    $startInfo = New-Object Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $engine
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.Arguments = (@('-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $scriptPath) + @($Arguments) |
+        ForEach-Object { ConvertTo-BootstrapProcessArgument ([string]$_) }) -join ' '
+    $process = New-Object Diagnostics.Process
+    $process.StartInfo = $startInfo
+    try {
+        if (-not $process.Start()) { throw 'Could not start the bootstrap entry test process' }
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        $process.WaitForExit()
+        return [pscustomobject]@{
+            exitCode = [int]$process.ExitCode
+            output = @($stdoutTask.Result, $stderrTask.Result | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join [Environment]::NewLine
+        }
+    } finally {
+        $process.Dispose()
+    }
+}
+
 try {
     Invoke-TestCase 'atomic JSON write and replacement' {
         $path = Join-Path $script:TestRoot 'atomic.json'
@@ -113,6 +214,268 @@ try {
         Assert-Test (@($items | Where-Object { $_.mode -eq 'winget' -and $_.architecture -eq 'x64' }).Count -gt 0) 'x64 WinGet metadata missing'
         $font = Get-BootstrapFontManifest (Join-Path $script:RepoRoot 'windows-bootstrap')
         Assert-Equal $font.sha256 'fab782a66f7d3019da64f6572db9fc5d3a4bcb19f9fa13e2d8a62e3693d6396e' 'font checksum changed'
+    }
+
+    Invoke-TestCase 'extension manifest schema is restrictive and supports singleton arrays' {
+        $directory = Join-Path $script:TestRoot 'extension-schema'
+        $unicodeReason = 'Caf' + [char]0x00E9 + ' vendor workflow'
+        $manual = New-TestExtensionManualItem 'manual-review' 'Manual review' $unicodeReason
+        $items = @(
+            (New-TestExtensionWingetItem -Id 'machine-cli' -Name 'Machine CLI' -ItemContext elevated -WingetId 'Contoso.MachineCli'),
+            (New-TestExtensionWingetItem -Id 'user-cli' -Name 'User CLI' -ItemContext user -WingetId 'Contoso.UserCli'),
+            $manual
+        )
+        $path = Write-TestExtensionManifest $directory 'fixture-tools' $items 'valid.json' -Utf8Bom
+        $parsed = @(Get-BootstrapExtensionManifestItems @($path) (Join-Path $script:RepoRoot 'windows-bootstrap'))
+        Assert-Test ($parsed.Count -eq 3) 'valid extension items were not parsed'
+        Assert-Equal ([string]@($parsed | Where-Object { $_.id -eq 'fixture-tools/manual-review' })[0].reason) $unicodeReason 'UTF-8 BOM/non-ASCII manual reason changed'
+        Assert-Equal (Get-BootstrapItemExecutionContext @($parsed | Where-Object { $_.id -eq 'fixture-tools/user-cli' })[0]) 'user' 'user WinGet context was not retained'
+        $registry = Get-BootstrapProviderRegistry (Join-Path $script:RepoRoot 'windows-bootstrap')
+        Assert-Test (@($registry['manual'].executionContexts).Count -eq 1) 'singleton provider execution-context array was not retained'
+        Assert-Equal ([string]@($registry['manual'].executionContexts)[0]) 'elevated' 'manual provider context changed'
+
+        $unsafe = New-TestExtensionWingetItem -Id 'unsafe-command' -Name 'Unsafe command' -WingetId 'Contoso.UnsafeCommand'
+        $unsafe['installCommand'] = 'Start-Process calc.exe'
+        $unsafePath = Write-TestExtensionManifest $directory 'unsafe-command' @($unsafe) 'unsafe-command.json'
+        Assert-Test (Test-Throws { @(Get-BootstrapExtensionManifestItems @($unsafePath) (Join-Path $script:RepoRoot 'windows-bootstrap')) | Out-Null }) 'extension installCommand was accepted'
+
+        $duplicateFieldPath = Join-Path $directory 'duplicate-field.json'
+        $duplicateFieldJson = '{"format":2,"id":"duplicate-field","items":[{"id":"duplicate-item","id":"other-item","name":"Duplicate field","provider":"manual","version":"manual-review","architecture":"x64","executionContext":"elevated","source":"manual:fixture/duplicate","checksum":"manual-review","reason":"Requires manual review"}]}'
+        [IO.File]::WriteAllText($duplicateFieldPath, $duplicateFieldJson, (New-Object Text.UTF8Encoding($false)))
+        Assert-Test (Test-Throws { @(Get-BootstrapExtensionManifestItems @($duplicateFieldPath) (Join-Path $script:RepoRoot 'windows-bootstrap')) | Out-Null }) 'extension JSON with duplicate fields was accepted'
+
+        $escapedDuplicateFieldPath = Join-Path $directory 'escaped-duplicate-field.json'
+        $escapedDuplicateFieldJson = '{"format":2,"id":"escaped-duplicate-field","items":[{"id":"escaped-item","\u0069d":"other-item","name":"Escaped duplicate field","provider":"manual","version":"manual-review","architecture":"x64","executionContext":"elevated","source":"manual:fixture/escaped-duplicate","checksum":"manual-review","reason":"Requires manual review"}]}'
+        [IO.File]::WriteAllText($escapedDuplicateFieldPath, $escapedDuplicateFieldJson, (New-Object Text.UTF8Encoding($false)))
+        Assert-Test (Test-Throws { @(Get-BootstrapExtensionManifestItems @($escapedDuplicateFieldPath) (Join-Path $script:RepoRoot 'windows-bootstrap')) | Out-Null }) 'extension JSON with escaped duplicate fields was accepted'
+
+        $unknown = New-TestExtensionWingetItem -Id 'unknown-provider' -Name 'Unknown provider' -WingetId 'Contoso.UnknownProvider'
+        $unknown['provider'] = 'download'
+        $unknownPath = Write-TestExtensionManifest $directory 'unknown-provider' @($unknown) 'unknown-provider.json'
+        Assert-Test (Test-Throws { @(Get-BootstrapExtensionManifestItems @($unknownPath) (Join-Path $script:RepoRoot 'windows-bootstrap')) | Out-Null }) 'unknown extension provider was accepted'
+
+        $badSource = New-TestExtensionWingetItem -Id 'bad-source' -Name 'Bad source' -WingetId 'Contoso.BadSource'
+        $badSource['source'] = 'winget:Contoso.OtherSource'
+        $badSourcePath = Write-TestExtensionManifest $directory 'bad-source' @($badSource) 'bad-source.json'
+        Assert-Test (Test-Throws { @(Get-BootstrapExtensionManifestItems @($badSourcePath) (Join-Path $script:RepoRoot 'windows-bootstrap')) | Out-Null }) 'WinGet source/ID mismatch was accepted'
+
+        $badScope = New-TestExtensionWingetItem -Id 'bad-scope' -Name 'Bad scope' -ItemContext user -WingetId 'Contoso.BadScope'
+        $badScope.install.scope = 'machine'
+        $badScopePath = Write-TestExtensionManifest $directory 'bad-scope' @($badScope) 'bad-scope.json'
+        Assert-Test (Test-Throws { @(Get-BootstrapExtensionManifestItems @($badScopePath) (Join-Path $script:RepoRoot 'windows-bootstrap')) | Out-Null }) 'user WinGet item with machine scope was accepted'
+
+        $firstDuplicatePath = Write-TestExtensionManifest $directory 'duplicate-one' @((New-TestExtensionManualItem 'same-item' 'First duplicate')) 'duplicate-one.json'
+        $secondDuplicatePath = Write-TestExtensionManifest $directory 'duplicate-two' @((New-TestExtensionManualItem 'same-item' 'Second duplicate')) 'duplicate-two.json'
+        Assert-Test (Test-Throws { @(Get-BootstrapExtensionManifestItems @($firstDuplicatePath, $secondDuplicatePath) (Join-Path $script:RepoRoot 'windows-bootstrap')) | Out-Null }) 'duplicate extension item IDs were accepted'
+
+        $duplicateWingetPath = Write-TestExtensionManifest $directory 'duplicate-winget' @(
+            (New-TestExtensionWingetItem -Id 'first' -Name 'First package' -WingetId 'Contoso.Duplicate'),
+            (New-TestExtensionWingetItem -Id 'second' -Name 'Second package' -WingetId 'Contoso.Duplicate')
+        ) 'duplicate-winget.json'
+        Assert-Test (Test-Throws { @(Get-BootstrapExtensionManifestItems @($duplicateWingetPath) (Join-Path $script:RepoRoot 'windows-bootstrap')) | Out-Null }) 'duplicate extension WinGet IDs were accepted'
+
+        $tooManyPaths = @()
+        foreach ($index in 1..17) { $tooManyPaths += (Join-Path $directory ("limit-$index.json")) }
+        Assert-Test (Test-Throws { Get-BootstrapExtensionManifestPaths ([string[]]$tooManyPaths) | Out-Null }) 'more than 16 extension manifests were accepted'
+
+        $tooManyItems = @()
+        foreach ($index in 1..65) {
+            $tooManyItems += New-TestExtensionManualItem ("item-$index") ("Manual $index")
+        }
+        $tooManyItemsPath = Write-TestExtensionManifest $directory 'too-many-items' $tooManyItems 'too-many-items.json'
+        Assert-Test (Test-Throws { @(Get-BootstrapExtensionManifestItems @($tooManyItemsPath) (Join-Path $script:RepoRoot 'windows-bootstrap')) | Out-Null }) 'more than 64 items in an extension manifest were accepted'
+
+        $oversizedPath = Join-Path $directory 'oversized.json'
+        [IO.File]::WriteAllBytes($oversizedPath, (New-Object byte[] 262145))
+        Assert-Test (Test-Throws { @(Get-BootstrapExtensionManifestItems @($oversizedPath) (Join-Path $script:RepoRoot 'windows-bootstrap')) | Out-Null }) 'an extension manifest over 256 KiB was accepted'
+
+        $globalPaths = @()
+        foreach ($manifestIndex in 1..5) {
+            $globalItems = @()
+            foreach ($itemIndex in 1..64) {
+                $globalItems += New-TestExtensionManualItem ("global-$manifestIndex-$itemIndex") ("Global manual $manifestIndex-$itemIndex")
+            }
+            $globalPaths += Write-TestExtensionManifest $directory ("global-$manifestIndex") $globalItems ("global-$manifestIndex.json")
+        }
+        Assert-Test (Test-Throws { @(Get-BootstrapExtensionManifestItems $globalPaths (Join-Path $script:RepoRoot 'windows-bootstrap')) | Out-Null }) 'more than 256 total extension items were accepted'
+    }
+
+    Invoke-TestCase 'extension snapshot binds approval and rejects manifest or snapshot tampering' {
+        if ([Environment]::OSVersion.Platform -ne 'Win32NT') { return }
+        $previousLocalAppData = $env:LOCALAPPDATA
+        $localAppData = Join-Path $script:TestRoot 'extension-snapshot-localappdata'
+        $directory = Join-Path $script:TestRoot 'extension-snapshot-manifest'
+        New-Item -ItemType Directory -Path $localAppData -Force | Out-Null
+        $env:LOCALAPPDATA = $localAppData
+        try {
+            $path = Write-TestExtensionManifest $directory 'snapshot-tools' @(
+                (New-TestExtensionWingetItem -Id 'snapshot-cli' -Name 'Snapshot CLI' -WingetId 'Contoso.SnapshotCli'),
+                (New-TestExtensionManualItem 'snapshot-manual' 'Snapshot manual')
+            )
+            $plan = Get-TestExtensionPlan @($path)
+            $runId = [guid]::NewGuid().ToString('N')
+            $snapshotPath = Write-BootstrapPackagePlanSnapshot $runId 'Extension' $plan $plan.hash
+            $loaded = Read-BootstrapPackagePlanSnapshot $snapshotPath $runId 'Extension' $plan.hash @()
+            Assert-Equal $loaded.hash $plan.hash 'protected snapshot did not reconstruct the approved plan'
+            Assert-Test (Test-BootstrapUserPhasePathSecurity $snapshotPath (Get-BootstrapCurrentUserSid) -RequireProtectedDacl) 'snapshot DACL was not protected'
+
+            $mutated = New-TestExtensionManualItem 'snapshot-manual' 'Snapshot manual' 'Changed raw manifest after approval'
+            $ignoredManifestPath = Write-TestExtensionManifest $directory 'snapshot-tools' @(
+                (New-TestExtensionWingetItem -Id 'snapshot-cli' -Name 'Snapshot CLI' -WingetId 'Contoso.SnapshotCli'),
+                $mutated
+            )
+            $reloaded = Read-BootstrapPackagePlanSnapshot $snapshotPath $runId 'Extension' $plan.hash @()
+            Assert-Equal $reloaded.hash $plan.hash 'snapshot reader reloaded a changed raw extension manifest'
+
+            $snapshot = Read-BootstrapJson $snapshotPath
+            $snapshot.plan.items[0].wingetId = 'Contoso.Tampered'
+            Write-BootstrapJson $snapshotPath $snapshot
+            Protect-BootstrapUserPhaseHandoff $snapshotPath (Get-BootstrapCurrentUserSid) | Out-Null
+            Assert-Test (Test-Throws { Read-BootstrapPackagePlanSnapshot $snapshotPath $runId 'Extension' $plan.hash @() | Out-Null }) 'tampered snapshot was accepted'
+        } finally {
+            $env:LOCALAPPDATA = $previousLocalAppData
+        }
+    }
+
+    Invoke-TestCase 'extension entry PlanOnly and DryRun leave no state before approval' {
+        if ([Environment]::OSVersion.Platform -ne 'Win32NT') { return }
+        $previousLocalAppData = $env:LOCALAPPDATA
+        $localAppData = Join-Path $script:TestRoot 'extension-entry-localappdata'
+        $directory = Join-Path $script:TestRoot 'extension-entry-manifest'
+        $planOnlyStateRoot = Join-Path $script:TestRoot 'extension-entry-planonly-state'
+        $dryRunStateRoot = Join-Path $script:TestRoot 'extension-entry-dryrun-state'
+        $unapprovedStateRoot = Join-Path $script:TestRoot 'extension-entry-unapproved-state'
+        New-Item -ItemType Directory -Path $localAppData -Force | Out-Null
+        $env:LOCALAPPDATA = $localAppData
+        try {
+            $path = Write-TestExtensionManifest $directory 'entry-tools' @(
+                (New-TestExtensionWingetItem -Id 'entry-cli' -Name 'Entry CLI' -WingetId 'Contoso.EntryCli'),
+                (New-TestExtensionManualItem 'entry-manual' 'Entry manual')
+            )
+            $expectedPlan = Get-TestExtensionPlan @($path)
+            $planOnly = Invoke-TestBootstrapEntry @(
+                '-Profile', 'Extension', '-ExtensionManifest', $path,
+                '-StateRoot', $planOnlyStateRoot, '-PlanOnly'
+            )
+            Assert-Equal $planOnly.exitCode 0 "PlanOnly failed: $($planOnly.output)"
+            $display = $planOnly.output | ConvertFrom-Json
+            Assert-Equal ([string]$display.hash) ([string]$expectedPlan.hash) 'PlanOnly returned the wrong extension plan hash'
+            Assert-Test (-not (Test-Path -LiteralPath $planOnlyStateRoot)) 'PlanOnly created state'
+
+            $dryRun = Invoke-TestBootstrapEntry @(
+                '-Profile', 'Extension', '-ExtensionManifest', $path,
+                '-StateRoot', $dryRunStateRoot, '-DryRun', '-PassThru', '-Quiet', '-NoProgress'
+            )
+            Assert-Equal $dryRun.exitCode 0 "Extension DryRun failed: $($dryRun.output)"
+            $report = $dryRun.output | ConvertFrom-Json
+            Assert-Test ([bool]$report.dryRun) 'extension DryRun did not return a dry-run report'
+            Assert-Test (@($report.results | Where-Object { $_.name -eq 'Entry CLI' -and $_.status -eq 'skipped' }).Count -eq 1) 'extension DryRun did not skip the WinGet item'
+            Assert-Test (-not (Test-Path -LiteralPath $dryRunStateRoot)) 'extension DryRun created state/report/log/lock/cache'
+            Assert-Test (-not (Test-Path -LiteralPath (Join-Path $localAppData 'WindowsBootstrap'))) 'extension DryRun created user-phase storage'
+
+            $unapproved = Invoke-TestBootstrapEntry @(
+                '-Profile', 'Extension', '-ExtensionManifest', $path,
+                '-StateRoot', $unapprovedStateRoot, '-NoElevate', '-Quiet', '-NoProgress'
+            )
+            Assert-Test ($unapproved.exitCode -ne 0) 'unapproved extension execution succeeded'
+            Assert-Test ($unapproved.output -match '(?i)ApprovePlan|protected BootstrapPackagePlanPath') 'unapproved extension did not fail at the approval/snapshot boundary'
+            Assert-Test (-not (Test-Path -LiteralPath $unapprovedStateRoot)) 'unapproved extension created machine state before rejection'
+
+            $invalid = New-TestExtensionWingetItem -Id 'entry-invalid' -Name 'Entry invalid' -WingetId 'Contoso.EntryInvalid'
+            $invalid['installCommand'] = 'Start-Process calc.exe'
+            $invalidPath = Write-TestExtensionManifest $directory 'entry-invalid' @($invalid) 'entry-invalid.json'
+            $invalidStateRoot = Join-Path $script:TestRoot 'extension-entry-invalid-state'
+            $invalidResult = Invoke-TestBootstrapEntry @(
+                '-Profile', 'Extension', '-ExtensionManifest', $invalidPath,
+                '-StateRoot', $invalidStateRoot, '-DryRun', '-PassThru', '-Quiet', '-NoProgress'
+            )
+            Assert-Test ($invalidResult.exitCode -ne 0) 'invalid extension schema succeeded through the entrypoint'
+            Assert-Test ($invalidResult.output -match '(?i)unsupported field|installCommand') 'invalid extension schema did not fail at parsing'
+            Assert-Test (-not (Test-Path -LiteralPath $invalidStateRoot)) 'invalid extension schema created machine state before rejection'
+        } finally {
+            $env:LOCALAPPDATA = $previousLocalAppData
+        }
+    }
+
+    Invoke-TestCase 'persisted Extension Verify and Cleanup use protected provenance' {
+        if ([Environment]::OSVersion.Platform -ne 'Win32NT') { return }
+        $previousLocalAppData = $env:LOCALAPPDATA
+        $localAppData = Join-Path $script:TestRoot 'extension-persisted-localappdata'
+        $directory = Join-Path $script:TestRoot 'extension-persisted-manifest'
+        $stateRoot = Join-Path $script:TestRoot 'extension-persisted-state'
+        New-Item -ItemType Directory -Path $localAppData, $stateRoot -Force | Out-Null
+        $env:LOCALAPPDATA = $localAppData
+        try {
+            $path = Write-TestExtensionManifest $directory 'persisted-tools' @(
+                (New-TestExtensionManualItem 'persisted-manual' 'Persisted manual')
+            )
+            $plan = Get-TestExtensionPlan @($path)
+            $runId = [guid]::NewGuid().ToString('N')
+            $snapshotPath = Write-BootstrapPackagePlanSnapshot $runId 'Extension' $plan $plan.hash
+            $state = New-BootstrapState $stateRoot $runId 'Extension' $false
+            $state.packagePlan = Get-BootstrapPackagePlanRecord $plan
+            $state.packagePlan.snapshotPath = $snapshotPath
+            $statePath = Join-Path $stateRoot 'state.json'
+            Write-BootstrapJson $statePath $state
+            $stateHash = Get-BootstrapFileSha256 $statePath
+
+            $verify = Invoke-TestBootstrapEntry @(
+                '-Verify', '-DryRun', '-StateRoot', $stateRoot,
+                '-PassThru', '-Quiet', '-NoProgress'
+            )
+            Assert-Equal $verify.exitCode 0 "persisted Extension Verify dry-run failed: $($verify.output)"
+            $verifyReport = $verify.output | ConvertFrom-Json
+            Assert-Equal ([string]$verifyReport.profile) 'Extension' 'Verify did not derive Extension profile from persisted state'
+            Assert-Test ([bool]$verifyReport.dryRun) 'Verify did not remain dry-run'
+
+            $cleanup = Invoke-TestBootstrapEntry @(
+                '-CleanupFailed', '-DryRun', '-StateRoot', $stateRoot,
+                '-PassThru', '-Quiet', '-NoProgress'
+            )
+            Assert-Equal $cleanup.exitCode 0 "persisted Extension Cleanup dry-run failed: $($cleanup.output)"
+            $cleanupReport = $cleanup.output | ConvertFrom-Json
+            Assert-Equal ([string]$cleanupReport.profile) 'Extension' 'Cleanup did not derive Extension profile from persisted state'
+            Assert-Test ([bool]$cleanupReport.dryRun) 'Cleanup did not remain dry-run'
+            Assert-Equal (Get-BootstrapFileSha256 $statePath) $stateHash 'persisted Extension dry-run mutated state'
+            Assert-Test (-not (Test-Path -LiteralPath (Join-Path $stateRoot 'report.json'))) 'persisted Extension dry-run created a report'
+            Assert-Test (-not (Test-Path -LiteralPath (Join-Path $stateRoot 'bootstrap.lock'))) 'persisted Extension dry-run created a lock'
+
+            $substituted = Invoke-TestBootstrapEntry @(
+                '-Verify', '-DryRun', '-StateRoot', $stateRoot,
+                '-BootstrapPackagePlanPath', (Join-Path $localAppData 'other-plan.json'),
+                '-PassThru', '-Quiet', '-NoProgress'
+            )
+            Assert-Test ($substituted.exitCode -ne 0) 'persisted Extension Verify accepted a substituted snapshot path'
+            Assert-Test ($substituted.output -match '(?i)snapshot path does not match persisted\s+state') "substituted snapshot path failed for the wrong reason: $($substituted.output)"
+            Assert-Equal (Get-BootstrapFileSha256 $statePath) $stateHash 'substituted persisted Verify mutated state'
+
+            $rawResume = Invoke-TestBootstrapEntry @(
+                '-Resume', '-DryRun', '-StateRoot', $stateRoot,
+                '-ExtensionManifest', $path, '-PassThru', '-Quiet', '-NoProgress'
+            )
+            Assert-Test ($rawResume.exitCode -ne 0) 'Resume accepted a raw ExtensionManifest'
+            Assert-Test ($rawResume.output -match '(?i)only Run, PlanOnly, and DryRun may read ExtensionManifest') 'raw Resume failed for the wrong provenance boundary'
+            Assert-Equal (Get-BootstrapFileSha256 $statePath) $stateHash 'raw Resume mutated state'
+        } finally {
+            $env:LOCALAPPDATA = $previousLocalAppData
+        }
+    }
+
+    Invoke-TestCase 'extension plan canonical hash preserves arrays and manifest order' {
+        $singleArray = [pscustomobject]@{ items = @('one') }
+        Assert-Equal (ConvertTo-BootstrapCanonicalJsonText $singleArray) '{"items":["one"]}' 'canonical JSON collapsed a singleton array'
+        Assert-Test ((Get-BootstrapCanonicalValueSha256 $singleArray) -ne (Get-BootstrapCanonicalValueSha256 ([pscustomobject]@{ items = 'one' }))) 'canonical hash did not distinguish scalar from singleton array'
+        $left = [pscustomobject][ordered]@{ z = 2; a = 1 }
+        $right = [pscustomobject][ordered]@{ a = 1; z = 2 }
+        Assert-Equal (Get-BootstrapCanonicalValueSha256 $left) (Get-BootstrapCanonicalValueSha256 $right) 'canonical object hash depends on property insertion order'
+
+        $directory = Join-Path $script:TestRoot 'extension-order'
+        $zetaPath = Write-TestExtensionManifest $directory 'zeta' @((New-TestExtensionManualItem 'manual-z' 'Zeta manual')) 'zeta.json'
+        $alphaPath = Write-TestExtensionManifest $directory 'alpha' @((New-TestExtensionManualItem 'manual-a' 'Alpha manual')) 'alpha.json'
+        $first = Get-TestExtensionPlan @($zetaPath, $alphaPath)
+        $second = Get-TestExtensionPlan @($alphaPath, $zetaPath)
+        Assert-Equal $first.hash $second.hash 'package-plan hash depends on ExtensionManifest argument order'
+        Assert-Equal ([string]$first.extensionManifests[0].id) 'alpha' 'extension manifests were not ordinal-sorted'
     }
 
     Invoke-TestCase 'winget source resolves msstore override and defaults to winget' {
@@ -374,6 +737,44 @@ try {
         Assert-Test (-not (Test-BootstrapUserPhaseHandoffData $handoff $runId 'S-1-5-21-1-2-3-1001' $expandedItems).valid) 'user phase handoff was accepted after machine-phase manifest changed'
         $handoff.results = @($handoff.results) + [pscustomobject]@{ name = 'Injected'; mode = 'winget'; wingetId = 'Injected.Package'; status = 'completed' }
         Assert-Test (-not (Test-BootstrapUserPhaseHandoffData $handoff $runId 'S-1-5-21-1-2-3-1001' $items).valid) 'user phase handoff with injected item was accepted'
+    }
+
+    Invoke-TestCase 'extension user-phase handoff binds the protected package plan hash' {
+        $runId = '0123456789abcdef0123456789abcdef'
+        $ownerSid = 'S-1-5-21-1-2-3-1001'
+        $planHash = (('c' * 64) -join '')
+        $items = @([pscustomobject]@{
+            id = 'extension-tools/user-cli'
+            name = 'Extension user CLI'
+            mode = 'winget'
+            provider = 'winget'
+            wingetId = 'Contoso.ExtensionUserCli'
+            executionContext = 'user'
+            extensionManifest = 'C:\\fixture\\tools.json'
+        })
+        $handoff = [pscustomobject]@{
+            format = 1
+            kind = 'windows-bootstrap-user-phase'
+            runId = $runId
+            ownerSid = $ownerSid
+            createdAt = [DateTime]::UtcNow.ToString('o')
+            profile = 'Extension'
+            host = [pscustomobject]@{ UserSid = $ownerSid; IsAdministrator = $false; SessionId = 1; IntegritySid = 'S-1-16-8192' }
+            manifestFingerprint = Get-BootstrapUserPhaseManifestFingerprint $items
+            packagePlanHash = $planHash
+            results = @([pscustomobject]@{
+                name = 'Extension user CLI'
+                mode = 'winget'
+                executionContext = 'user'
+                wingetId = 'Contoso.ExtensionUserCli'
+                status = 'completed'
+            })
+        }
+        Assert-Test (Test-BootstrapUserPhaseHandoffData $handoff $runId $ownerSid $items 'Extension' $planHash).valid 'extension handoff with matching plan hash was rejected'
+        $handoff.packagePlanHash = (('d' * 64) -join '')
+        Assert-Test (-not (Test-BootstrapUserPhaseHandoffData $handoff $runId $ownerSid $items 'Extension' $planHash).valid) 'extension handoff with a changed plan hash was accepted'
+        $handoff.PSObject.Properties.Remove('packagePlanHash')
+        Assert-Test (-not (Test-BootstrapUserPhaseHandoffData $handoff $runId $ownerSid $items 'Extension' $planHash).valid) 'extension handoff without a plan hash was accepted'
     }
 
     Invoke-TestCase 'run IDs are constrained and survive explicit context construction' {
@@ -698,6 +1099,59 @@ try {
         Assert-Test ($arguments -match '(?i)-SkipRime') 'SkipRime option missing'
         Assert-Test ($arguments -match '(?i)-NoOptional') 'NoOptional option missing'
         Assert-Test ($arguments -match '(?i)-NoNetworkCheck') 'NoNetworkCheck option missing'
+    }
+
+    Invoke-TestCase 'UAC child and Extension resume only carry protected plan provenance' {
+        $approval = (('a' * 64) -join '')
+        $bound = @{
+            Profile = 'Extension'
+            ExtensionManifest = @('C:\users\owner\tools.json')
+            PlanOnly = [System.Management.Automation.SwitchParameter]::new($true)
+            BootstrapPackagePlanPath = 'C:\attacker\plan.json'
+            ApprovePlan = 'b' * 64
+            StateRoot = 'C:\state'
+        }
+        $child = Get-BootstrapElevatedChildParameters $bound 'C:\Users\owner\AppData\Local\WindowsBootstrap\UserPhase\0123456789abcdef0123456789abcdef\package-plan.json' $approval
+        Assert-Test (-not $child.ContainsKey('ExtensionManifest')) 'UAC child retained raw ExtensionManifest'
+        Assert-Test (-not $child.ContainsKey('PlanOnly')) 'UAC child retained PlanOnly'
+        Assert-Equal ([string]$child.BootstrapPackagePlanPath) 'C:\Users\owner\AppData\Local\WindowsBootstrap\UserPhase\0123456789abcdef0123456789abcdef\package-plan.json' 'UAC child snapshot path was not replaced'
+        Assert-Equal ([string]$child.ApprovePlan) $approval 'UAC child approval was not replaced'
+
+        $context = New-TestContext 'extension-resume-options'
+        $context.State.profile = 'Extension'
+        $context.State.packagePlan = [ordered]@{
+            hash = $approval
+            snapshotPath = 'C:\Users\owner\AppData\Local\WindowsBootstrap\UserPhase\0123456789abcdef0123456789abcdef\package-plan.json'
+        }
+        $context.State.executionOptions = [ordered]@{
+            bootstrapPackagePlanPath = 'C:\attacker\plan.json'
+            approvedPlan = (('b' * 64) -join '')
+        }
+        $arguments = Get-BootstrapResumeArguments $context 'C:\repo\windows-bootstrap\install.ps1'
+        Assert-Test ($arguments -match [regex]::Escape($context.State.packagePlan.snapshotPath)) 'Resume did not use state snapshot path'
+        Assert-Test ($arguments -match $approval) 'Resume did not use state approval hash'
+        Assert-Test ($arguments -notmatch 'C:\\attacker\\plan\.json') 'Resume used mutable executionOptions snapshot path'
+        Assert-Test (Test-Throws { Get-BootstrapExtensionResumePlanReference $context.State 'C:\other\plan.json' $approval | Out-Null }) 'Resume accepted substituted snapshot path'
+        Assert-Test (Test-Throws { Get-BootstrapExtensionResumePlanReference $context.State $context.State.packagePlan.snapshotPath (('b' * 64) -join '') | Out-Null }) 'Resume accepted substituted approval hash'
+    }
+
+    Invoke-TestCase 'persisted Extension state rejects missing or substituted provenance' {
+        $approval = (('e' * 64) -join '')
+        $state = New-BootstrapState 'C:\state' '0123456789abcdef0123456789abcdef' 'Extension' $false
+        $state.packagePlan = [ordered]@{
+            hash = $approval
+            snapshotPath = 'C:\Users\owner\AppData\Local\WindowsBootstrap\UserPhase\0123456789abcdef0123456789abcdef\package-plan.json'
+        }
+        $reference = Get-BootstrapExtensionResumePlanReference $state
+        Assert-Equal ([string]$reference.approvePlan) $approval 'persisted Extension approval hash changed'
+        Assert-Test (Test-Throws { Get-BootstrapExtensionResumePlanReference $state 'C:\other\package-plan.json' '' | Out-Null }) 'persisted Extension state accepted a substituted path'
+        $state.packagePlan = [ordered]@{ hash = $approval }
+        Assert-Test (Test-Throws { Get-BootstrapExtensionResumePlanReference $state | Out-Null }) 'persisted Extension state accepted a missing snapshot path'
+        $state.packagePlan = [ordered]@{
+            hash = 'not-a-sha256'
+            snapshotPath = 'C:\Users\owner\AppData\Local\WindowsBootstrap\UserPhase\0123456789abcdef0123456789abcdef\package-plan.json'
+        }
+        Assert-Test (Test-Throws { Get-BootstrapExtensionResumePlanReference $state | Out-Null }) 'persisted Extension state accepted an invalid approval hash'
     }
 
     Invoke-TestCase 'dry-run context writes no state or lock files' {

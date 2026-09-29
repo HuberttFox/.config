@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "providers": [
+    {
+      "id": "winget",
+      "extensionAllowed": true,
+      "executionContexts": ["elevated", "user"]
+    },
+    {
+      "id": "manual",
+      "extensionAllowed": true,
+      "executionContexts": ["elevated"]
+    }
+  ]
+}

@@ -9,7 +9,8 @@ Setup, validation, coding style, and component authoring for this repository.
 The Windows features are separate from `install.sh`. `windows-bootstrap/` is the
 unattended Windows 11 entry and supports Windows PowerShell 5.1 and PowerShell 7;
 `windows/` is the PowerShell 7 x64 RIME deployment. Follow
-[Windows bootstrap](../windows-bootstrap/README.md) and
+[Windows bootstrap](../windows-bootstrap/README.md),
+[Windows Bootstrap Extensions](windows-bootstrap-extensions.md), and
 [Windows RIME](../windows/README.md). Portable suites are not native acceptance;
 see [Native Windows acceptance](architecture.md#native-windows-acceptance) and
 [the acceptance evidence](handoff-windows-rime-native-acceptance-evidence.md).
@@ -49,6 +50,7 @@ Rules:
 - Tests use temporary `HOME`/state directories and stubs. Never call real Homebrew, network, `sudo`, `chsh`, or application installers.
 - `--dry-run` is intentionally unsupported; use the integration tests instead.
 - `windows-bootstrap` changes require `windows-bootstrap/tests/run.ps1` coverage and must keep `-DryRun` free of state/report/lock/Registry/profile/WSL/input-method mutations.
+- External software belongs only in a `format: 2` Extension manifest. It may use only documented repository-owned providers; never accept arbitrary command/script/URL/downloader fields. Provider changes require code review, portable coverage, contract documentation, and applicable Windows 11 native acceptance.
 - New RIME `.ps1` files require `#requires -Version 7.0`; `windows-bootstrap` scripts intentionally declare `#requires -Version 5.1`.
 
 ## Bash style

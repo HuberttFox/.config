@@ -1,0 +1,17 @@
+{
+  "format": 2,
+  "id": "example-manual-review",
+  "items": [
+    {
+      "id": "vendor-gui-tool",
+      "name": "Vendor GUI Tool",
+      "provider": "manual",
+      "version": "manual-review",
+      "architecture": "x64",
+      "executionContext": "elevated",
+      "source": "manual:vendor/gui-tool",
+      "checksum": "manual-review",
+      "reason": "Vendor workflow requires visible interactive confirmation."
+    }
+  ]
+}
