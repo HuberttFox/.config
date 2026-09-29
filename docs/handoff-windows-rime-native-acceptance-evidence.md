@@ -12,11 +12,13 @@ This record separates evidence from claims. `/init` and PowerShell Direct were u
 - Windows edition reported by the guest: Windows 11 Pro, build `26200`, x64. The registry `ProductName` still reports `Windows 10 Pro`; the implementation accepts that label only with a Windows 11 build number and rejects Server products.
 - PowerShell 7: `7.6.6`, x64. Windows PowerShell: `5.1.26100.7920`/`5.1.26100.9549` observations during acceptance. Guest process ran elevated as `WINBOOTTEST\tester`.
 - Git, WinGet, Windows Terminal, WSL, and Weasel runtime were present in the guest fixture.
-- Current production source hashes, recorded in the protected Spotify fixture's `fixture-source.json` and checked again in the current worktree:
-  - `windows-bootstrap/lib/Bootstrap.Core.ps1`: `42c49264a7b6ede444e13e6c78326314786c48a6636b6592bef685c9315a979f`
+- The protected Spotify fixture's `fixture-source.json` binds its earlier success-path evidence to its recorded source hashes. The final ACL retry acceptance exported an exact pre-override production Core copy in `final-acceptance-07/bootstrap/user-wsl-resume-minimal-da3ad7a12ec34f2bb9dd57281d438eec/source-production-Bootstrap.Core.ps1`; its `SHA256SUMS` passed:
+  - `windows-bootstrap/lib/Bootstrap.Core.ps1`: `e8b3d4b754b956e7e737b8e4f3d2c2a3ebc42f81853e536d2547302f89caf8b3`
   - `windows-bootstrap/install.ps1`: `1c4778424605418b32b0cdf74e20415c6a575b1794789ec245ac6dd108697017`
-  - `windows-bootstrap/tests/run.ps1`: `a48922a3a6334a1321a4d98a343cbf75d2ad5823188e9d1ce281546a274e9ba8`
-  - production `windows-bootstrap/packages/optional.json`: `3fa508c671ad71da771d9d559a5ab06860a4fa429c3839f9285572580204fdff`
+  - `windows-bootstrap/tests/run.ps1`: `83f3f6b3e582f3f4f70cc134a3f4450b6c3436d4f0372d5593eff8eb50ad524b`
+  - production `windows-bootstrap/packages/core.json`: `364860990b8894ed5f5a314eec51a8e0d45d4fab2e1825b1e1064c7e4ad1e9d6`
+- The same fixture records `productionCoreSha256` before appending its fixture-only WSL resolver, then exports the resulting fixture copy as `0f4fc7241f3afbb67a0cefd215aa25f3fee5c6499ce6a3e1241ec741ae3805c3`. Its controlled Core manifest is `52f302f55ec70b6e5fe402d57f70956fdc693238e844a7aee1026e7f8bf8f62f`.
+- Production `windows-bootstrap/packages/optional.json` remains `3fa508c671ad71da771d9d559a5ab06860a4fa429c3839f9285572580204fdff`; it is outside this controlled Core fixture.
 - The native Spotify fixture intentionally replaces only its selected Optional manifest with a Spotify-only copy (`edff08203ce2732e438e8de0ac22dad90b97e16210b061b03814cf3625f9a03f`) and uses empty Base/Core manifests. It proves normal-user provenance/UAC import behavior, not a full production Optional install.
 - Font manifest SHA-256: `fab782a66f7d3019da64f6572db9fc5d3a4bcb19f9fa13e2d8a62e3693d6396e`.
 
@@ -157,7 +159,24 @@ Evidence: `F:\Win11BootstrapTest\evidence\final-acceptance-07\bootstrap\spotify-
 - Both `%LOCALAPPDATA%\WindowsBootstrap\UserPhase\59c817e0a4c7487891110709f73f9932` and `handoff.json` have protected DACLs with only `WINBOOTTEST\tester` and `SYSTEM`, both FullControl; no handoff `*.tmp` files remained.
 - A separate `InteractiveToken`/`LeastPrivilege` task then ran `winget list --id Spotify.Spotify --exact` from the same session-1 Medium token. Exit `0` reported `Spotify.Spotify 1.3.1.234.g59d6bf59` from source `winget`.
 
-This is native acceptance for Spotify's normal-user-to-UAC success path and protected handoff import. It does not prove UAC cancellation/retry, child-failure relay, WSL Resume, or a full production Optional installation.
+This is native acceptance for Spotify's normal-user-to-UAC success path and protected handoff import. It does not prove UAC cancellation/retry or a full production Optional installation.
+
+#### Elevated-child failure relay
+
+Evidence: `F:\Win11BootstrapTest\evidence\final-acceptance-07\bootstrap\relay-child-failure-869f38288af64edda682967081be2f02`. Its checksum manifest covers the parent stdout/stderr, child state/report, handoff, relay marker, task XML, and fixture-source snapshot.
+
+- Medium, session-1 parent returned `parentExitCode=1` after an intentional elevated-child failure.
+- Parent stdout remained one parseable JSON report, stderr was empty, and child report/state/relay marker share run ID `869f38288af64edda682967081be2f02`.
+- This is native acceptance for the `-PassThru` child-failure relay contract. It is not UAC decline/retry evidence.
+
+#### Combined normal-user and WSL Resume
+
+Evidence: `F:\Win11BootstrapTest\evidence\final-acceptance-07\bootstrap\user-wsl-resume-minimal-da3ad7a12ec34f2bb9dd57281d438eec`. `sha256sum -c SHA256SUMS` passed for all 18 exported guest artifacts, including state/report/log, initial/final handoffs, task XML, controlled UTF-16LE `wsl.exe`, exact pre-override production Core source, and copied fixture source.
+
+- Run ID `a1bdd26ea1b04635b4b81466b6852e40` began in `WINBOOTTEST\tester` session 2, non-admin, Medium integrity `S-1-16-8192`. It reached `awaiting-reboot` and registered `WindowsBootstrap-Resume-a1bdd26ea1b04635b4b81466b6852e40` as `InteractiveToken` + `Limited`.
+- The Limited Resume task ran a second normal-user phase under the same Medium SID/session, safely reprotected the existing owner/SYSTEM-only root and `handoff.json`, then imported it in the high-integrity child. The initial and final handoff records preserve Medium provenance; both DACL snapshots contain only `WINBOOTTEST\tester` and `SYSTEM`, FullControl, with inheritance disabled.
+- Controlled WSL output used UTF-16LE. Resume changed the stub from reboot-required to ready; WSL completed, state reached `completed`, `requiresReboot=false`, and the Resume task file no longer existed.
+- Scope: controlled Core fixture only. It proves normal-user handoff retry plus Limited-token WSL Resume, not a real WSL installation or full production package profile.
 
 PotPlayer remains **BLOCKED**: cold-guest download/hash, explicit GUI launch, user-selected destination, confirmation/live layout-hash check, upgrade/re-run, and cleanup boundaries still need native evidence before any `completed` claim.
 
@@ -175,7 +194,9 @@ PotPlayer remains **BLOCKED**: cold-guest download/hash, explicit GUI launch, us
 | Item | Scope | Verdict | Evidence / limitation |
 |---|---|---|---|
 | Windows 11 x64 and signed PS7 x64 host contract | native | PASS | Guest build `26200`, x64, PS7 `7.6.6`; parser and host-policy cases pass. Registry label is `Windows 10 Pro`, handled by build-aware detection. |
-| Spotify normal-user UAC handoff | native guest success path + portable guards | PASS for success path | `final-acceptance-07/bootstrap/spotify-uac-protected`: InteractiveToken/Limited parent was session-1 Medium, UAC child was session-1 High, protected handoff imported, and elevated/live WinGet verification passed. UAC decline/retry and child-failure relay remain unverified. |
+| Spotify normal-user UAC handoff | native guest success path + portable guards | PASS for success path | `final-acceptance-07/bootstrap/spotify-uac-protected`: InteractiveToken/Limited parent was session-1 Medium, UAC child was session-1 High, protected handoff imported, and elevated/live WinGet verification passed. UAC decline/retry remains unverified. |
+| Elevated-child `-PassThru` failure relay | native guest fixture | PASS | `final-acceptance-07/bootstrap/relay-child-failure-869f38288af64edda682967081be2f02`: Medium parent exits nonzero while stdout remains parseable JSON and state/report/relay run IDs match. |
+| Normal-user handoff retry plus Limited-token WSL Resume | native guest controlled fixture | PASS for fixture scope | `final-acceptance-07/bootstrap/user-wsl-resume-minimal-da3ad7a12ec34f2bb9dd57281d438eec`: two Medium user phases, protected DACL retry, high child import, UTF-16LE WSL ready check, completed state, task cleanup, and exact pre-override production Core source; not real WSL installation/full production profile. |
 | Registry rollback, absent/present value, forced recovery | native fixture | PASS | `0077`/`0079` records exact restore and `recovery_required` behavior. |
 | Junction interruption/recovery and reappearing selector | native filesystem fixture | PASS | Guest suite plus native recovery records; ambiguous selector is preserved, never force-overwritten. |
 | Weasel Interactive/Quiet deployment artifacts | native runtime | BLOCKED | Existing Weasel deployment attempts reached runtime/version/deployer problems and timeout/stale-artifact paths. No clean fresh Interactive and Quiet acceptance pair was obtained. |
@@ -193,7 +214,7 @@ PotPlayer remains **BLOCKED**: cold-guest download/hash, explicit GUI launch, us
 2. The live runtime-control matrix (`-IncludeUserName`, window-handle graceful close, windowless forced stop, final PID revalidation) remains unverified. Portable tests prove fail-closed logic only.
 3. Cross-SID/session isolation and actual Raycast execution remain unverified because required user/session and Raycast setup were not introduced.
 4. The compact final health collector experienced intermittent PowerShell Direct credential/remoting failures. Existing successful health output and the isolated harness summary remain the retained recovery evidence.
-5. UAC decline/retry, `-PassThru` relay when the elevated child fails, regular `-Resume`, and Limited-token WSL Resume remain unverified. The guest UAC settings auto-approve the success path and cannot prove cancellation behavior.
+5. UAC decline/retry remains unverified. The guest UAC settings auto-approve the success path and cannot prove cancellation behavior. Elevated-child failure relay and controlled normal-user/WSL Resume fixtures are accepted above; they do not substitute for a real user cancellation.
 6. PotPlayer's PortableApps path has no cold-guest interactive acceptance yet: download/hash, GUI launch, selected root, explicit confirmation, upgrade/re-run, and cleanup remain open.
 7. Existing macOS integration failure in `evidence/gate4.txt` (`~/.zimrc is not a symlink`) is unrelated to Windows changes; no macOS installer source was edited.
 

@@ -229,23 +229,66 @@ function Test-BootstrapWinGetUserScope([string[]]$InstallArguments) {
     return $hasScope
 }
 
-function Get-BootstrapPathOwnerSid([string]$Path) {
+function Get-BootstrapPathAccessControl([string]$Path, [System.Security.AccessControl.AccessControlSections]$Sections) {
     $full = Assert-BootstrapPlainPath $Path
-    $acl = Get-Acl -LiteralPath $full -ErrorAction Stop
-    $owner = [string]$acl.Owner
-    if ([string]::IsNullOrWhiteSpace($owner)) { throw "Owner is unavailable for bootstrap path: $full" }
-    if ($owner -match '^S-1-\d+(?:-\d+)+$') { return $owner }
-    return ([Security.Principal.NTAccount]$owner).Translate([Security.Principal.SecurityIdentifier]).Value
+    $item = Get-Item -LiteralPath $full -Force -ErrorAction Stop
+    try {
+        # Windows PowerShell exposes these as instance methods. PowerShell 7
+        # exposes them through FileSystemAclExtensions instead.
+        if ($item -is [IO.DirectoryInfo]) {
+            if ($null -ne $item.PSObject.Methods['GetAccessControl']) { return $item.GetAccessControl($Sections) }
+            return [IO.FileSystemAclExtensions]::GetAccessControl([IO.DirectoryInfo]$item, $Sections)
+        }
+        if ($item -is [IO.FileInfo]) {
+            if ($null -ne $item.PSObject.Methods['GetAccessControl']) { return $item.GetAccessControl($Sections) }
+            return [IO.FileSystemAclExtensions]::GetAccessControl([IO.FileInfo]$item, $Sections)
+        }
+        throw "Bootstrap path is neither file nor directory: $full"
+    } catch {
+        throw "Cannot read bootstrap owner/DACL: $full ($($_.Exception.Message))"
+    }
+}
+
+function Set-BootstrapPathAccessControl([string]$Path, $AccessControl) {
+    $full = Assert-BootstrapPlainPath $Path
+    $item = Get-Item -LiteralPath $full -Force -ErrorAction Stop
+    try {
+        if ($item -is [IO.DirectoryInfo]) {
+            if ($null -ne $item.PSObject.Methods['SetAccessControl']) { $item.SetAccessControl($AccessControl); return }
+            [IO.FileSystemAclExtensions]::SetAccessControl([IO.DirectoryInfo]$item, [System.Security.AccessControl.DirectorySecurity]$AccessControl)
+            return
+        }
+        if ($item -is [IO.FileInfo]) {
+            if ($null -ne $item.PSObject.Methods['SetAccessControl']) { $item.SetAccessControl($AccessControl); return }
+            [IO.FileSystemAclExtensions]::SetAccessControl([IO.FileInfo]$item, [System.Security.AccessControl.FileSecurity]$AccessControl)
+            return
+        }
+        throw "Bootstrap path is neither file nor directory: $full"
+    } catch {
+        throw "Cannot set bootstrap DACL: $full ($($_.Exception.Message))"
+    }
+}
+
+function Get-BootstrapPathOwnerSid([string]$Path) {
+    $sections = [System.Security.AccessControl.AccessControlSections]::Owner
+    $acl = Get-BootstrapPathAccessControl $Path $sections
+    $owner = $acl.GetOwner([System.Security.Principal.SecurityIdentifier])
+    if ($null -eq $owner -or [string]::IsNullOrWhiteSpace([string]$owner.Value)) {
+        throw "Owner is unavailable for bootstrap path: $Path"
+    }
+    return [string]$owner.Value
 }
 
 function Test-BootstrapUserPhasePathSecurity([string]$Path, [string]$OwnerSid, [switch]$RequireProtectedDacl) {
     try {
         if ([string]::IsNullOrWhiteSpace($OwnerSid)) { return $false }
         $fullPath = Assert-BootstrapPlainPath $Path
-        $acl = Get-Acl -LiteralPath $fullPath -ErrorAction Stop
-        if ((Get-BootstrapPathOwnerSid $fullPath) -cne $OwnerSid) { return $false }
-        if ($RequireProtectedDacl -and -not [bool]$acl.AreAccessRulesProtected) { return $false }
+        $sections = [System.Security.AccessControl.AccessControlSections]::Owner -bor [System.Security.AccessControl.AccessControlSections]::Access
+        $acl = Get-BootstrapPathAccessControl $fullPath $sections
         $sidType = [System.Security.Principal.SecurityIdentifier]
+        $owner = $acl.GetOwner($sidType)
+        if ($null -eq $owner -or [string]$owner.Value -cne $OwnerSid) { return $false }
+        if ($RequireProtectedDacl -and -not [bool]$acl.AreAccessRulesProtected) { return $false }
         $rules = @($acl.GetAccessRules($true, $true, $sidType))
         if ($rules.Count -eq 0) { return $false }
         $allowedSids = @($OwnerSid, 'S-1-5-18')
@@ -273,10 +316,14 @@ function Protect-BootstrapUserPhasePath([string]$Path, [string]$OwnerSid, [switc
         Test-Path -LiteralPath $fullPath -PathType Leaf
     }
     if (-not $exists) { throw "User phase $expectedType is missing: $fullPath" }
-    if ((Get-BootstrapPathOwnerSid $fullPath) -cne $OwnerSid) {
+    # Medium-integrity user phase has no SeSecurityPrivilege. Request only the
+    # owner and DACL sections; full descriptors can require SACL access.
+    $sections = [System.Security.AccessControl.AccessControlSections]::Owner -bor [System.Security.AccessControl.AccessControlSections]::Access
+    $acl = Get-BootstrapPathAccessControl $fullPath $sections
+    $owner = $acl.GetOwner([System.Security.Principal.SecurityIdentifier])
+    if ($null -eq $owner -or [string]$owner.Value -cne $OwnerSid) {
         throw "User phase $expectedType owner does not match current user: $fullPath"
     }
-    $acl = Get-Acl -LiteralPath $fullPath -ErrorAction Stop
     $acl.SetAccessRuleProtection($true, $false)
     $sidType = [System.Security.Principal.SecurityIdentifier]
     foreach ($rule in @($acl.GetAccessRules($true, $true, $sidType))) {
@@ -295,7 +342,7 @@ function Protect-BootstrapUserPhasePath([string]$Path, [string]$OwnerSid, [switc
         $rule = New-Object -TypeName System.Security.AccessControl.FileSystemAccessRule -ArgumentList @($identity, $fullControl, $inheritance, $propagation, $allow)
         [void]$acl.AddAccessRule($rule)
     }
-    Set-Acl -LiteralPath $fullPath -AclObject $acl -ErrorAction Stop
+    Set-BootstrapPathAccessControl $fullPath $acl
     if (-not (Test-BootstrapUserPhasePathSecurity $fullPath $OwnerSid -RequireProtectedDacl)) {
         throw "User phase $expectedType DACL does not match the required owner/SYSTEM policy: $fullPath"
     }

@@ -88,14 +88,16 @@ try {
         Assert-Test ($first -ne (Get-BootstrapUserPhaseManifestFingerprint @($user, $changedMachine))) 'manifest fingerprint did not bind machine item details'
     }
 
-    Invoke-TestCase 'user phase handoff file DACL is owner and SYSTEM only' {
+    Invoke-TestCase 'user phase handoff DACL is owner/SYSTEM-only and idempotent' {
         if ([Environment]::OSVersion.Platform -ne 'Win32NT') { return }
         $root = Join-Path $script:TestRoot 'handoff-acl'
         $ownerSid = Get-BootstrapCurrentUserSid
         New-Item -ItemType Directory -Path $root -Force | Out-Null
         Protect-BootstrapUserPhaseRoot $root $ownerSid | Out-Null
+        Protect-BootstrapUserPhaseRoot $root $ownerSid | Out-Null
         $handoff = Join-Path $root 'handoff.json'
         Write-BootstrapJson $handoff ([ordered]@{ format = 1 })
+        Protect-BootstrapUserPhaseHandoff $handoff $ownerSid | Out-Null
         Protect-BootstrapUserPhaseHandoff $handoff $ownerSid | Out-Null
         Assert-Test (Test-BootstrapUserPhasePathSecurity $root $ownerSid -RequireProtectedDacl) 'protected user phase root was rejected'
         Assert-Test (Test-BootstrapUserPhasePathSecurity $handoff $ownerSid -RequireProtectedDacl) 'protected handoff DACL was rejected'
