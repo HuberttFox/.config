@@ -36,7 +36,7 @@ Evidence retained under `F:\Win11BootstrapTest` (`/mnt/f/Win11BootstrapTest` on 
 - Current `windows-bootstrap/tests/run.ps1` was run against the current worktree under Windows PowerShell 5.1 and PowerShell 7. Each literal summary: `Tests: 50 passed, 0 failed`. These are temporary-root tests; they do not invoke installers.
 - RIME suite includes live Windows reparse/Junction cases. It does not certify Weasel process identity across users, UAC provenance, real Raycast execution, or the residual check-to-use race.
 - Bash gate evidence: `evidence/gate4.txt` records `bash -n` success and `tests/bootstrap.sh exit=0`. Existing macOS `tests/integration.sh` reached its expected Windows-host shim boundary but ended with unrelated `~/.zimrc is not a symlink`; no macOS installer files were changed.
-- `git diff --check` passed for repository changes. No commit or push was performed.
+- `git diff --check` passed for repository changes. ACL retry fix and evidence update were committed and pushed as `67cf35d` (`fix(windows): allow user-phase ACL retry`).
 
 ## Bootstrap lifecycle evidence
 
