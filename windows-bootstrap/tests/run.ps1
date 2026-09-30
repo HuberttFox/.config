@@ -478,6 +478,15 @@ try {
         Assert-Equal ([string]$first.extensionManifests[0].id) 'alpha' 'extension manifests were not ordinal-sorted'
     }
 
+    Invoke-TestCase 'winget installed-list matching tolerates exact-query misses' {
+        $row = "PyCharm 2026.1.1 JetBrains.PyCharm 2026.1.1 2026.2.3 winget"
+        Assert-Test (Test-BootstrapWingetListOutput $row 'JetBrains.PyCharm') 'installed row with the exact id token was not matched'
+        Assert-Test (-not (Test-BootstrapWingetListOutput "PyCharm Community JetBrains.PyCharm.Community 1.0 winget" 'JetBrains.PyCharm')) 'prefix-colliding id was accepted'
+        Assert-Test (-not (Test-BootstrapWingetListOutput 'No installed package found matching input criteria.' 'JetBrains.PyCharm')) 'not-found text was accepted as an installed row'
+        Assert-Test (-not (Test-BootstrapWingetListOutput '' 'JetBrains.PyCharm')) 'empty output was accepted'
+        Assert-Test (-not (Test-BootstrapWingetListOutput $row '')) 'empty id was accepted'
+    }
+
     Invoke-TestCase 'winget source resolves msstore override and defaults to winget' {
         Assert-Test ((Get-BootstrapWingetSource ([pscustomobject]@{ source = 'winget:Example.Package' })) -eq 'winget') 'winget source prefix did not default to winget'
         Assert-Test ((Get-BootstrapWingetSource ([pscustomobject]@{ source = 'msstore:9PFXXSHC64H3' })) -eq 'msstore') 'msstore source prefix was not honored'

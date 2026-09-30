@@ -2174,10 +2174,22 @@ function Get-BootstrapManifestItems([string]$ManifestDirectory, [string[]]$Files
     return $items
 }
 
+function Test-BootstrapWingetListOutput([string]$Output, [string]$Id) {
+    if ([string]::IsNullOrWhiteSpace($Output) -or [string]::IsNullOrWhiteSpace($Id)) { return $false }
+    $pattern = '(^|\s)' + [regex]::Escape($Id) + '(\s|$)'
+    foreach ($line in @($Output -split "`r?`n")) {
+        if ($line -match $pattern) { return $true }
+    }
+    return $false
+}
+
 function Test-BootstrapWingetInstalled([string]$Winget, [string]$Id) {
     $result = Invoke-BootstrapExternal $Winget @('list', '--id', $Id, '--exact', '--accept-source-agreements', '--disable-interactivity')
-    if ($result.ExitCode -ne 0) { return $false }
-    return $result.Output -match [regex]::Escape($Id)
+    if ($result.ExitCode -eq 0 -and (Test-BootstrapWingetListOutput $result.Output $Id)) { return $true }
+    # ARP/index state can transiently make the exact-ID query report nothing even
+    # though the package is installed. Fall back to the full installed list.
+    $all = Invoke-BootstrapExternal $Winget @('list', '--accept-source-agreements', '--disable-interactivity')
+    return ($all.ExitCode -eq 0 -and (Test-BootstrapWingetListOutput $all.Output $Id))
 }
 
 function Get-BootstrapWingetSource($Item) {

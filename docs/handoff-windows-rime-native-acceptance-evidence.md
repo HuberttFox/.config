@@ -229,6 +229,7 @@ PotPlayer remains **BLOCKED**: cold-guest download/hash, explicit GUI launch, us
 5. PotPlayer's PortableApps path has no cold-guest interactive acceptance yet: download/hash, GUI launch, selected root, explicit confirmation, upgrade/re-run, and cleanup remain open.
 6. Existing macOS integration failure in `evidence/gate4.txt` (`~/.zimrc is not a symlink`) is unrelated to Windows changes; no macOS installer source was edited.
 7. The restricted Extension interface is natively verified for the read-only path and the elevated WinGet path. User-context WinGet items and `manual` items in a real run remain open.
+8. PyCharm/WinGet installed-state investigation: `winget list --id ... --exact` can transiently return `-1978335212` while the package is installed; winget diagnostic logs show the ARP entry matching multiple JetBrains IDs plus a Store manifest API lookup. `Test-BootstrapWingetInstalled` now falls back to the full installed list. No winget-initiated asynchronous uninstall appeared in the logs, and the guest's PyCharm disappeared later without any bootstrap action; the cause was not reproducible from the retained artifacts.
 
 ## Cleanup and preservation
 
