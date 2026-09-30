@@ -210,5 +210,5 @@ snapshot ACL 只包含 owner SID 与 `SYSTEM`。
 elevated child 导入并实时验证。handoff 记录 `IsAdministrator: false`、
 `S-1-16-8192`，plan hash 与 approval 一致，snapshot/handoff DACL 仅 owner/SYSTEM。
 
-仍未验证：真实运行中的 `manual` 项，以及 `winget`/`manual` 之外的 provider。不得在没有新
-guest evidence bundle 的情况下宣称通过。
+仍未验证：`winget`/`manual` 之外的 provider（目前未启用任何）；新增 provider 必须自带仓库实现、测试、
+契约与原生验收。

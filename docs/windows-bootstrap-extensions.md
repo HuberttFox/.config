@@ -225,8 +225,9 @@ imported and live-verified it. The recorded handoff shows
 `IsAdministrator: false` with `S-1-16-8192`, the plan hash matches the
 approval, and the snapshot/handoff DACLs are owner/SYSTEM-only.
 
-Still open: `manual` items in a real run and any provider other than
-`winget`/`manual`. Do not claim those without a new guest acceptance bundle.
+Still open: providers other than `winget`/`manual` (none are enabled today).
+Adding one requires its own repository implementation, tests, contract, and
+native acceptance.
 
 Portable tests do not prove a real package installation, UAC prompt, ACL
 behavior, or WinGet result. Provider changes that mutate a Windows host need
