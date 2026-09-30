@@ -218,9 +218,15 @@ UAC child, and the elevated child installed and live-verified
 recorded plan hash matched the approval and snapshot, and the snapshot ACL
 contained only the owner SID and `SYSTEM`.
 
-Still open: user-context WinGet items in a real run, `manual` items in a real
-run, and any provider other than `winget`/`manual`. Do not claim those without
-a new guest acceptance bundle.
+That native evidence also covers the user-context path: a Limited
+(Medium-integrity) parent installed a `executionContext: user` WinGet item,
+wrote the protected snapshot plus `handoff.json`, and the elevated child
+imported and live-verified it. The recorded handoff shows
+`IsAdministrator: false` with `S-1-16-8192`, the plan hash matches the
+approval, and the snapshot/handoff DACLs are owner/SYSTEM-only.
+
+Still open: `manual` items in a real run and any provider other than
+`winget`/`manual`. Do not claim those without a new guest acceptance bundle.
 
 Portable tests do not prove a real package installation, UAC prompt, ACL
 behavior, or WinGet result. Provider changes that mutate a Windows host need

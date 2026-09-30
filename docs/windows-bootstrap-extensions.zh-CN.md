@@ -205,5 +205,10 @@ snapshot、触发真实 UAC child，elevated child 按已批准计划安装并�
 `zufuliu.notepad4`；state 达到 `completed`，记录的 plan hash 与 approval、snapshot 一致，
 snapshot ACL 只包含 owner SID 与 `SYSTEM`。
 
-仍未验证：真实运行中的 user-context WinGet 项、`manual` 项，以及 `winget`/`manual` 之外
-的 provider。不得在没有新 guest evidence bundle 的情况下宣称通过。
+该原生验收也覆盖了 user-context 路径：Limited（Medium integrity）父进程安装
+`executionContext: user` 的 WinGet 项，写入 protected snapshot 与 `handoff.json`，
+elevated child 导入并实时验证。handoff 记录 `IsAdministrator: false`、
+`S-1-16-8192`，plan hash 与 approval 一致，snapshot/handoff DACL 仅 owner/SYSTEM。
+
+仍未验证：真实运行中的 `manual` 项，以及 `winget`/`manual` 之外的 provider。不得在没有新
+guest evidence bundle 的情况下宣称通过。
