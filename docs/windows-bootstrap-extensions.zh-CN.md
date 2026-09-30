@@ -200,6 +200,10 @@ Medium-integrity Limited token 下同样 58/58，并复现真实入口行为：`
 approval hash、`-DryRun` 不创建 state、未知字段 manifest 在创建 state 之前被拒绝、
 `Resume` 携带 raw `-ExtensionManifest` 被拒绝。
 
-该原生验收仅覆盖只读路径。真实 WinGet 安装、真实 UAC 提升以及 mutating extension 的
-protected-snapshot 导入仍未做原生验收，不得在没有新 guest evidence bundle 的情况下宣称
-通过。
+该原生验收同时覆盖了可变路径：guest 中 Limited（Medium integrity）计划任务创建受保护
+snapshot、触发真实 UAC child，elevated child 按已批准计划安装并实时验证
+`zufuliu.notepad4`；state 达到 `completed`，记录的 plan hash 与 approval、snapshot 一致，
+snapshot ACL 只包含 owner SID 与 `SYSTEM`。
+
+仍未验证：真实运行中的 user-context WinGet 项、`manual` 项，以及 `winget`/`manual` 之外
+的 provider。不得在没有新 guest evidence bundle 的情况下宣称通过。

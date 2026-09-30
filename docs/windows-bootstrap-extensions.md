@@ -211,9 +211,16 @@ Limited token, and reproduced the read-only real entry-point behavior:
 unknown-field manifest fails before state, and a raw `-ExtensionManifest` on
 `Resume` is rejected.
 
-That native run is read-only. A real WinGet install, a real UAC elevation, and
-the protected-snapshot import for a mutating extension remain unverified
-natively; do not claim them without a new guest acceptance bundle.
+That native run also covered the mutating path: a Limited (Medium-integrity)
+scheduled task in the guest created the protected snapshot, opened the real
+UAC child, and the elevated child installed and live-verified
+`zufuliu.notepad4` from the approved plan; state reached `completed`, the
+recorded plan hash matched the approval and snapshot, and the snapshot ACL
+contained only the owner SID and `SYSTEM`.
+
+Still open: user-context WinGet items in a real run, `manual` items in a real
+run, and any provider other than `winget`/`manual`. Do not claim those without
+a new guest acceptance bundle.
 
 Portable tests do not prove a real package installation, UAC prompt, ACL
 behavior, or WinGet result. Provider changes that mutate a Windows host need
