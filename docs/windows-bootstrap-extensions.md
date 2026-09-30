@@ -203,6 +203,18 @@ rejection, UAC/Resume provenance helpers, and read-only entry-point regressions
 for `-PlanOnly`, `-DryRun`, malformed schemas, and persisted
 `Verify`/`CleanupFailed` provenance.
 
+Portable coverage passes on the host under Windows PowerShell 5.1 and
+PowerShell 7. A disposable Windows 11 guest (build 26200, PS 5.1.26100.7920,
+pwsh 7.6.6) also passed both suites 58/58 when run with a Medium-integrity
+Limited token, and reproduced the read-only real entry-point behavior:
+`-PlanOnly` emits the approval hash, `-DryRun` creates no state, an
+unknown-field manifest fails before state, and a raw `-ExtensionManifest` on
+`Resume` is rejected.
+
+That native run is read-only. A real WinGet install, a real UAC elevation, and
+the protected-snapshot import for a mutating extension remain unverified
+natively; do not claim them without a new guest acceptance bundle.
+
 Portable tests do not prove a real package installation, UAC prompt, ACL
 behavior, or WinGet result. Provider changes that mutate a Windows host need
 separate Windows 11 x64 guest acceptance evidence.

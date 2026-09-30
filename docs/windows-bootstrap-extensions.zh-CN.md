@@ -193,3 +193,13 @@ persisted `Verify`/`CleanupFailed` provenance 只读回归。
 
 portable test 不证明真实 package installation、UAC prompt、ACL 行为或 WinGet 结果。会改动
 Windows host 的 provider 改动仍需要单独的 Windows 11 x64 guest 原生验收证据。
+
+已完成的只读原生验收：宿主 Windows PowerShell 5.1 与 PowerShell 7 便携 suite 通过；
+disposable Windows 11 guest（build 26200、PS 5.1.26100.7920、pwsh 7.6.6）在
+Medium-integrity Limited token 下同样 58/58，并复现真实入口行为：`-PlanOnly` 输出
+approval hash、`-DryRun` 不创建 state、未知字段 manifest 在创建 state 之前被拒绝、
+`Resume` 携带 raw `-ExtensionManifest` 被拒绝。
+
+该原生验收仅覆盖只读路径。真实 WinGet 安装、真实 UAC 提升以及 mutating extension 的
+protected-snapshot 导入仍未做原生验收，不得在没有新 guest evidence bundle 的情况下宣称
+通过。
